@@ -35,8 +35,9 @@ reads the result.
    approves its current head, so new commits need a fresh review. Sonnet
    subagent branches are named `agent/sonnet-<task>`. At most 2 review rounds, then claude
    decides. Real disagreements go to an agent-discussion.
-4. Merge: claude does the final review and merges into `main`; workers then
-   run `git merge main`.
+4. Merge: claude does the final review, merges into `main` and pushes `main`
+   to https://github.com/nutfull123/BADMINTONGAME (every file of the project
+   lives there); workers then run `git merge main`.
 
 Every task sent to a worker ends with: "When finished, print exactly
 `DONE <commit-hash> <one-line summary>` (or `BLOCKED <reason>`)."

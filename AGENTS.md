@@ -51,6 +51,32 @@ recommending from the agent's own list (`opencode models`, `agy models`):
 
 claude then restarts that crew session on the chosen model and resends the task.
 
+## Product decision
+
+Build a **web app first**. Keep the game rules (scoring, serve order, faults,
+win condition) in a pure module with no rendering, DOM or physics-engine
+imports, covered by tests, so they can be ported to Luau if the game later
+moves to Roblox. Rendering, input and shuttle physics stay in separate modules.
+
+## Skills (required)
+
+Use the skill for each phase. Skills marked *claude* exist only in Claude Code;
+every other one is also available to opencode and agy.
+
+| Phase | Skill | Who |
+|---|---|---|
+| New task intake | `brainstorming` → `grilling` → `prompt-master` → `orchestrate` (*claude*) | claude |
+| Game rules / vocabulary | `domain-modeling` | anyone defining rules |
+| Module structure | `codebase-design` | before adding a new module |
+| Game feel (shuttle physics, swing timing) | `prototype` — throwaway, never merged as-is | assigned worker |
+| Rules and scoring code | `tdd` — test first | assigned worker |
+| Any bug or failing test | `systematic-debugging` before proposing a fix | whoever hits it |
+| Menus, HUD, scoreboard | `impeccable` or `ui-ux-pro-max` | assigned worker |
+| Images and assets | `agy-image` (*claude*, runs through agy) | claude |
+| See it working | `run` (*claude*) — launch and screenshot the game | claude |
+| Before saying done | `verification-before-completion` | every agent |
+| After every finished piece of code | `code-review` (fixed point `main`, spec = the plan in PROGRESS.md) | the reviewer from the cross-review pairs, final pass by claude |
+
 ## Shared memory (one copy, absolute paths)
 
 Worktrees each have their own copy of tracked files, so always use these

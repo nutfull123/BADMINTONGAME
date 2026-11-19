@@ -37,6 +37,20 @@ reads the result.
 Every task sent to a worker ends with: "When finished, print exactly
 `DONE <commit-hash> <one-line summary>` (or `BLOCKED <reason>`)."
 
+### When a model runs out
+
+If you hit a quota, rate limit (429) or "model unavailable" error, stop and print
+`BLOCKED quota <model>`. claude watches for that (and for raw quota errors),
+does not switch models on its own, and asks the user to pick a replacement,
+recommending from the agent's own list (`opencode models`, `agy models`):
+
+- opencode: deepseek-v4.1-flash (paid) → qwen3.8-flash / glm-5.3-flash →
+  other `-free` models (mimo-v2.6-flash-free, hy4-flash-free)
+- agy: another Gemini 4 family (Argon ↔ Neon) → gemini-3.8-flash →
+  claude-sonnet-5-5 inside agy
+
+claude then restarts that crew session on the chosen model and resends the task.
+
 ## Shared memory (one copy, absolute paths)
 
 Worktrees each have their own copy of tracked files, so always use these

@@ -41,6 +41,8 @@ and a file under `.coord/discussions/`. Rules if you cannot load the skill:
 - Write only when the last turn marker is `[TURN: <your-name>]`; re-read the
   last 10 lines right before writing, and skip if it changed.
 - Append only. End your entry with `[TURN: <next-agent>]`.
+- Turn order with three agents: claude → opencode → agy → claude. With two,
+  alternate.
 - Finish with `[AGREED: <summary>]` or, after 12 rounds, `[DEADLOCKED]`.
 - Wait for your turn with:
   `bash ~/.agents/skills/agent-discussion/scripts/watch_turn.sh <file> <your-name>`

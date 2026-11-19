@@ -28,8 +28,12 @@ reads the result.
    commits on its own branch.
 3. Cross-review (never review your own work): opencode → reviewed by Sonnet;
    Sonnet → by opencode or agy; agy → by Sonnet. Reviewers do not edit code;
-   they write `.coord/reviews/<branch>.md` as `file:line — problem — why`,
-   ending with `APPROVE` or `CHANGES`. At most 2 review rounds, then claude
+   they write `.coord/reviews/<branch>.md` (e.g. `.coord/reviews/agent/opencode.md`)
+   as `file:line — problem — why`, ending with a last line of exactly
+   `APPROVE <commit>` (the branch head they reviewed) or `CHANGES`. A hook
+   blocks claude from merging any `agent/*` branch unless that last line
+   approves its current head, so new commits need a fresh review. Sonnet
+   subagent branches are named `agent/sonnet-<task>`. At most 2 review rounds, then claude
    decides. Real disagreements go to an agent-discussion.
 4. Merge: claude does the final review and merges into `main`; workers then
    run `git merge main`.

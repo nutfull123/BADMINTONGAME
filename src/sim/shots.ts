@@ -22,6 +22,7 @@ export interface LaunchInput {
   perfect: boolean;
   weak: boolean;                   // wrong-side basic swing
   stats: Stats;
+  doubles?: boolean;               // a doubles serve must land in front of the doubles long service line
 }
 
 export function launchShuttle(i: LaunchInput): ShuttleState {
@@ -31,6 +32,8 @@ export function launchShuttle(i: LaunchInput): ShuttleState {
   const cap = T.SPEED_CAP * (1 + (stats.power - T.STAT_MAX / 2) * T.SPEED_CAP_POWER_SPAN);
   const az = clamp(i.flick.x / T.FLICK_FULL, -1, 1) * T.FLICK_MAX_ANGLE + jitter() * T.RANDOM_SPREAD_ANGLE * spread;
   const mine = sgn * contact.z; // contact depth on the hitter's own side of the net
+  const serve = i.shot === 'serveShort' || i.shot === 'serveLong';
+  const back = i.doubles && serve ? COURT.longServiceLineDoubles : COURT.halfLength; // deepest legal landing
   const flatten = i.perfect ? T.PERFECT_FLATTEN : 0;
   const deg = (list: number[]) => list.map((d) => rad(d) - flatten);
 
@@ -44,7 +47,7 @@ export function launchShuttle(i: LaunchInput): ShuttleState {
     return l ? sgn * (contact.z - l.z) : -Infinity;
   };
   // forward distance needed to land `depth` metres past the net (the jitter is the non-perfect depth error)
-  const target = (depth: number) => mine + clamp(depth + jitter() * T.RANDOM_SPREAD_DEPTH * spread, 0.2, COURT.halfLength);
+  const target = (depth: number) => mine + clamp(depth + jitter() * T.RANDOM_SPREAD_DEPTH * spread, 0.2, back);
 
   const bisect = (f: (x: number) => number, lo: number, hi: number, want: number) => {
     for (let n = 0; n < T.SOLVE_ITERATIONS; n++) {
@@ -95,6 +98,6 @@ export function launchShuttle(i: LaunchInput): ShuttleState {
     case 'serveShort':
       return bySpeed(deg(T.SERVE_SHORT_ELEVATIONS_DEG), target(COURT.shortServiceLine + lerp(T.SERVE_SHORT_PAST_LINE_MIN, T.SERVE_SHORT_PAST_LINE_MAX, charge)));
     case 'serveLong':
-      return bySpeed(deg(T.SERVE_LONG_ELEVATIONS_DEG), target(COURT.halfLength - lerp(T.SERVE_LONG_FROM_LINE_MIN, T.SERVE_LONG_FROM_LINE_MAX, charge)));
+      return bySpeed(deg(T.SERVE_LONG_ELEVATIONS_DEG), target(back - lerp(T.SERVE_LONG_FROM_LINE_MIN, T.SERVE_LONG_FROM_LINE_MAX, charge)));
   }
 }

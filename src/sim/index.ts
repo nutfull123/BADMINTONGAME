@@ -113,7 +113,7 @@ export function recoverBetweenPoints(p: PlayerState, at: Vec3): PlayerState {
 }
 
 export function stepPlayer(
-  p0: PlayerState, intent: Intent, shuttle: ShuttleState, dt: number, assist: number,
+  p0: PlayerState, intent: Intent, shuttle: ShuttleState, dt: number, assist: number, doubles = false,
 ): { player: PlayerState; hit: HitResult | null } {
   const p: SimPlayer = { ...p0 };
   const { stats } = p;
@@ -310,7 +310,7 @@ export function stepPlayer(
         lungeT = lungeDur;
         p.racketHead = lungeHead;
       }
-      if (swing.best) hit = makeHit(p, swing, swing.best);
+      if (swing.best) hit = makeHit(p, swing, swing.best, doubles);
       swing = null;
     }
   }
@@ -367,13 +367,13 @@ export function stepPlayer(
   return { player: p, hit };
 }
 
-function makeHit(p: PlayerState, swing: Swing, c: Contact): HitResult {
+function makeHit(p: PlayerState, swing: Swing, c: Contact, doubles: boolean): HitResult {
   const wrongSide = (swing.basic === 'forehand' && c.rx < -T.WRONG_SIDE_DEADZONE) ||
     (swing.basic === 'backhand' && c.rx > T.WRONG_SIDE_DEADZONE);
   const perfect = !wrongSide && !swing.lift && c.d < T.SWEET_RADIUS;
   const shot: ShotType = swing.lift ? 'clear' : swing.shot;
   const launch = launchShuttle({
-    shot, side: p.side, contact: c.pos, flick: c.flick, charge: swing.charge, perfect, weak: wrongSide, stats: p.stats,
+    shot, side: p.side, contact: c.pos, flick: c.flick, charge: swing.charge, perfect, weak: wrongSide, stats: p.stats, doubles,
   });
   return { shot, perfect, launch };
 }

@@ -18,6 +18,8 @@ const team = (side: Side, n: number): PlayerState[] =>
 const singles = () => ({ near: team('near', 1), far: team('far', 1) });
 const doubles = () => ({ near: team('near', 2), far: team('far', 2) });
 const doublesMatch = () => createMatch(FORMAT_3X15, 'near', true);
+// Repeatable but varied randomness (LCG): a constant 0.5 makes bots never miss, so four of them can rally forever.
+const seeded = (seed: number) => () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 2 ** 32; };
 // the same intent for every player of both sides
 const all = (r: Rally, i: Intent): Record<Side, Intent[]> => ({
   near: r.players.near.map(() => i), far: r.players.far.map(() => i),
@@ -233,6 +235,23 @@ describe('doubles', () => {
     expect(r.result).toEqual({ winner: 'far', reason: 'fault' });
   });
 
+  it('a long doubles serve lands in the doubles service box, not past the doubles long service line', () => {
+    const longServe = (t: number, p: PlayerState): Intent => {
+      const i = idle();
+      if (t < 0.6) { i.charging = 'serveLong'; i.chargeTime = t; } else if (t < 0.6 + STEP * 1.5) { i.release = 'serveLong'; i.chargeTime = 0.6; }
+      return aimServe(i, p);
+    };
+    for (const r of [0, 0.5, 0.999]) {
+      setRandom(() => r);
+      const out = runRally({
+        match: doublesMatch(), players: doubles(),
+        intent: (side, slot, rr, t) => (side === 'near' && slot === rr.serverSlot ? longServe(t, rr.players.near[slot]) : idle()),
+      });
+      expect(out.result).toEqual({ winner: 'near', reason: 'in' });
+    }
+    setRandom(Math.random);
+  });
+
   it('a short doubles serve lands in the doubles service box', () => {
     setRandom(() => 0.5);
     const out = runRally({
@@ -243,18 +262,19 @@ describe('doubles', () => {
   });
 
   it('a rally with four bots ends with a point', () => {
-    setRandom(() => 0.5);
-    const bots = { near: [createBot('medium', () => 0.5), createBot('medium', () => 0.5)], far: [createBot('medium', () => 0.5), createBot('medium', () => 0.5)] };
+    setRandom(seeded(1));
+    const bots = { near: [createBot('medium', seeded(2)), createBot('medium', seeded(3))], far: [createBot('medium', seeded(4)), createBot('medium', seeded(5))] };
     const out = runRally({
       match: doublesMatch(), players: doubles(), maxSeconds: 90,
       intent: (side, slot, r) => botIntent(bots[side][slot], r.players[side][slot], botContext(r, side, slot), r.shuttle, STEP),
     });
     expect(out.result).not.toBeNull();
+    setRandom(Math.random);
   });
 
   it('four bots play ten points in a row, carrying the players from rally to rally', () => {
-    setRandom(() => 0.5);
-    const bots = { near: [createBot('medium', () => 0.5), createBot('medium', () => 0.5)], far: [createBot('medium', () => 0.5), createBot('medium', () => 0.5)] };
+    setRandom(seeded(1));
+    const bots = { near: [createBot('medium', seeded(2)), createBot('medium', seeded(3))], far: [createBot('medium', seeded(4)), createBot('medium', seeded(5))] };
     let match = doublesMatch();
     let players = doubles();
     for (let n = 1; n <= 10; n++) {
@@ -269,6 +289,7 @@ describe('doubles', () => {
       players = out.rally.players;
       expect(players.near.map((p) => p.slot)).toEqual([0, 1]);
     }
+    setRandom(Math.random);
   });
 
   it('botContext names the partner, the opponents, the server and the designated receiver', () => {

@@ -37,7 +37,7 @@ export function startMatch(root: HTMLElement, setup: MatchSetup, onAgain: () => 
   const renderer = createRenderer(container);
   const input = createInput(container.querySelector('canvas')!);
   const hud = createHud(root);
-  const viewControls = createViewControls(root, (z) => renderer.setZoom?.(z)); // setZoom comes with the render task
+  const viewControls = createViewControls(root, (z) => (renderer as { setZoom?: (z: number) => void }).setZoom?.(z)); // render adds setZoom in a parallel task
 
   let match: MatchState = createMatch(settings.format === '3x21' ? FORMAT_3X21 : FORMAT_3X15, 'near');
   let rally: Rally = startRally(

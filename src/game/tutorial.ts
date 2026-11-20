@@ -47,7 +47,7 @@ export function startTutorial(root: HTMLElement, setup: TutorialSetup, onAgain: 
   const renderer = createRenderer(container);
   const input = createInput(container.querySelector('canvas')!);
   const hud = createHud(root);
-  const viewControls = createViewControls(root, (z) => renderer.setZoom?.(z)); // setZoom comes with the render task
+  const viewControls = createViewControls(root, (z) => (renderer as { setZoom?: (z: number) => void }).setZoom?.(z)); // render adds setZoom in a parallel task
   const hudMatch: MatchState = createMatch(FORMAT_3X15, 'near');
 
   const tut = createTutorial();

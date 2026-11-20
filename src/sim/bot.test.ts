@@ -298,13 +298,14 @@ describe('doubles bot', () => {
     ].map(([x, vx, vy, vz]) => ({ pos: { x, y: 2.6, z: 3 }, vel: { x: vx, y: vy, z: vz } }));
     const pair = new Pair(at('far', 0, -1.5, -3.6), at('far', 1, 1.5, -3.6));
     let handled = 0;
+    const everSwung = new Set<number>();
     launches.forEach((launch, n) => {
       pair.hold(outgoing(n % 2 ? 8 : -8), 1.5, opps); // recover to formation after our last shot
       const swingers = new Set<number>();
       let shuttle = launch;
       for (let i = 0; i < 400; i++) {
         const r = pair.step(shuttle, 1 / 120, opps);
-        r.intents.forEach((it, k) => { if (swings(it)) swingers.add(k); });
+        r.intents.forEach((it, k) => { if (swings(it)) { swingers.add(k); everSwung.add(k); } });
         if (r.hit) { handled++; break; }
         const s = stepShuttle(shuttle, 1 / 120);
         if (s.event.kind !== 'none') break;
@@ -313,6 +314,7 @@ describe('doubles bot', () => {
       expect(swingers.size, `launch ${n}`).toBeLessThanOrEqual(1);
     });
     expect(handled).toBeGreaterThanOrEqual(launches.length - 3);
+    expect(everSwung.size).toBe(2); // the work is shared, not left to one partner
   });
 
   it('the receiver plays the serve and the receiving partner holds its spot without swinging', () => {

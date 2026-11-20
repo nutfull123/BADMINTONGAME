@@ -1,4 +1,6 @@
-import type { BodyType, MatchEvent, MatchState, Side, Stats } from '../types';
+import type { BodyType, Gender, MatchEvent, MatchState, Side, Stats } from '../types';
+import { heightOf } from '../sim/tuning';
+import { EVENTS, eventsFor, fitEvent } from './events';
 
 export const STAT_BUDGET = 20;
 
@@ -129,6 +131,10 @@ function ensureStyles(): void {
       background: #38bdf8;
       color: #082f49;
       border-color: #7dd3fc;
+    }
+    .bm-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
     }
     .bm-section-title {
       font-size: 14px;
@@ -466,11 +472,57 @@ export function showSetup(
     short: document.createElement('button'),
   };
 
-  const presetLabels: Record<BodyType, string> = {
-    tall: 'ตัวสูง 1.95m (Tall)',
-    balanced: 'สมดุล 1.78m (Balanced)',
-    short: 'ตัวเล็ก 1.63m (Short)',
+  const presetNames: Record<BodyType, string> = {
+    tall: 'ตัวสูง (Tall)',
+    balanced: 'สมดุล (Balanced)',
+    short: 'ตัวเล็ก (Short)',
   };
+  const presetLabel = (body: BodyType, gender: Gender) =>
+    `${presetNames[body]} ${heightOf({ gender, body }).toFixed(2)}m`;
+
+  // Gender + event pickers; refreshed together so only fitting events are enabled
+  const genderHeader = document.createElement('div');
+  genderHeader.className = 'bm-section-title';
+  genderHeader.textContent = 'เพศ (Gender)';
+  const genderRow = document.createElement('div');
+  genderRow.className = 'bm-btn-row';
+  const genderButtons = new Map<Gender, HTMLButtonElement>();
+  (
+    [['male', 'ชาย (Male)'], ['female', 'หญิง (Female)']] as Array<[Gender, string]>
+  ).forEach(([g, text]) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'bm-btn';
+    btn.dataset.gender = g;
+    btn.textContent = text;
+    btn.addEventListener('click', () => {
+      currentStats = { ...currentStats, gender: g };
+      currentSettings.event = fitEvent(currentSettings.event, g);
+      refreshStatsUI();
+    });
+    genderButtons.set(g, btn);
+    genderRow.appendChild(btn);
+  });
+
+  const eventHeader = document.createElement('div');
+  eventHeader.className = 'bm-section-title';
+  eventHeader.textContent = 'ประเภท (Event)';
+  const eventRow = document.createElement('div');
+  eventRow.className = 'bm-btn-row';
+  const eventButtons = new Map<MatchEvent, HTMLButtonElement>();
+  EVENTS.forEach(({ value, label }) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'bm-btn';
+    btn.dataset.event = value;
+    btn.textContent = label;
+    btn.addEventListener('click', () => {
+      currentSettings.event = value;
+      refreshStatsUI();
+    });
+    eventButtons.set(value, btn);
+    eventRow.appendChild(btn);
+  });
 
   // Budget header
   const budgetHeader = document.createElement('div');
@@ -506,6 +558,13 @@ export function showSetup(
     budgetBadge.textContent = `แต้มคงเหลือ (Points Left): ${left} / ${STAT_BUDGET}`;
     (Object.keys(presetButtons) as BodyType[]).forEach((b) => {
       presetButtons[b].classList.toggle('bm-btn-active', currentStats.body === b);
+      presetButtons[b].textContent = presetLabel(b, currentStats.gender);
+    });
+    genderButtons.forEach((btn, g) => btn.classList.toggle('bm-btn-active', currentStats.gender === g));
+    const valid = eventsFor(currentStats.gender);
+    eventButtons.forEach((btn, e) => {
+      btn.disabled = !valid.includes(e);
+      btn.classList.toggle('bm-btn-active', currentSettings.event === e);
     });
     statMeta.forEach(({ key }) => {
       const inp = sliderInputs[key];
@@ -520,9 +579,8 @@ export function showSetup(
     btn.type = 'button';
     btn.className = 'bm-btn';
     btn.dataset.preset = body;
-    btn.textContent = presetLabels[body];
     btn.addEventListener('click', () => {
-      currentStats = { ...PRESETS[body] };
+      currentStats = { ...PRESETS[body], gender: currentStats.gender };
       refreshStatsUI();
     });
     presetRow.appendChild(btn);
@@ -691,6 +749,10 @@ export function showSetup(
 
   panel.append(
     title,
+    genderHeader,
+    genderRow,
+    eventHeader,
+    eventRow,
     presetHeader,
     presetRow,
     budgetHeader,

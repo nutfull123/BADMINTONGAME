@@ -70,10 +70,17 @@ export function isInSingles(at: Vec3, side: Side): boolean {
   return d >= 0 && d <= COURT.halfLength && Math.abs(at.x) <= COURT.halfWidthSingles;
 }
 
+// World-axis bounds of `side`'s singles service court (lines included). Own right is +x for near, -x for far.
+export function serviceBox(side: Side, court: ServiceCourt): { xMin: number; xMax: number; zMin: number; zMax: number } {
+  const plusX = (side === 'near') === (court === 'right');
+  const [xMin, xMax] = plusX ? [0, COURT.halfWidthSingles] : [-COURT.halfWidthSingles, 0];
+  const [zMin, zMax] = side === 'near'
+    ? [COURT.shortServiceLine, COURT.halfLength]
+    : [-COURT.halfLength, -COURT.shortServiceLine];
+  return { xMin, xMax, zMin, zMax };
+}
+
 export function isInServiceBox(at: Vec3, receiverSide: Side, court: ServiceCourt): boolean {
-  const d = depth(at, receiverSide);
-  if (d < COURT.shortServiceLine || d > COURT.halfLength || Math.abs(at.x) > COURT.halfWidthSingles) return false;
-  // receiver's right is +x for near, -x for far
-  const rightX = receiverSide === 'near' ? at.x : -at.x;
-  return court === 'right' ? rightX >= 0 : rightX <= 0;
+  const b = serviceBox(receiverSide, court);
+  return at.x >= b.xMin && at.x <= b.xMax && at.z >= b.zMin && at.z <= b.zMax;
 }

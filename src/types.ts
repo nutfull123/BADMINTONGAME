@@ -122,7 +122,7 @@ export interface WorldView {
   aim?: AimView | null;       // human racket aid; omitted or null hides it
 }
 
-// Racket aid for the human: where the racket face is, where the incoming shuttle will cross the racket plane,
+// Racket aid for the human: where the racket face is, where the incoming shuttle is right now,
 // which side the racket is on, and whether it is close enough to hit.
 export interface AimView {
   racket: Vec3;

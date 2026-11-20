@@ -3,7 +3,8 @@ import { FORMAT_3X15, awardRally, createMatch } from '../rules';
 import { createPlayer, setRandom } from '../sim';
 import { botIntent, createBot } from '../sim/bot';
 import type { Intent, PlayerState, Stats } from '../types';
-import { STEP, aimServe, judgeFloor, runRally, serveSpots, startRally } from './rally';
+import { serviceBox } from '../physics';
+import { STEP, aimServe, judgeFloor, runRally, serveSpots, startRally, stepRally } from './rally';
 
 const stats: Stats = { body: 'balanced', speed: 5, power: 5, recovery: 5, stamina: 5 };
 const idle = (): Intent => ({
@@ -51,6 +52,30 @@ describe('runRally', () => {
     expect(r.near.pos.x).toBeLessThan(0);
     expect(r.far.pos.x).toBeGreaterThan(0);
     expect(serveSpots('far', 'right').server.x).toBeLessThan(0);
+  });
+
+  it('during the serve both players stay inside their own service court, off the lines', () => {
+    const r = startRally(createMatch(FORMAT_3X15, 'near'), ...players()); // near serves from the right (+x)
+    const walk = (x: number, z: number): Intent => ({ ...idle(), move: { x, z } });
+    // the server walks hard toward the left court and the net; the receiver walks toward the far left court and back
+    for (let i = 0; i < 360; i++) stepRally(r, { near: walk(-1, -1), far: walk(1, -1) }, STEP, 0.7);
+    expect(r.stage).toBe('serve');
+    const nb = serviceBox('near', 'right'), fb = serviceBox('far', 'right');
+    expect(r.near.pos.x).toBeGreaterThan(nb.xMin);
+    expect(r.near.pos.z).toBeGreaterThan(nb.zMin);
+    expect(r.far.pos.x).toBeLessThan(fb.xMax);
+    expect(r.far.pos.z).toBeGreaterThan(fb.zMin);
+  });
+
+  it('feet are stationary once the server starts the serve', () => {
+    const r = startRally(createMatch(FORMAT_3X15, 'near'), ...players());
+    const nearAt = { ...r.near.pos }, farAt = { ...r.far.pos };
+    const charge: Intent = { ...idle(), move: { x: 1, z: 1 }, charging: 'serveShort', chargeTime: 0.2 };
+    for (let i = 0; i < 60; i++) stepRally(r, { near: charge, far: { ...idle(), move: { x: -1, z: 1 } } }, STEP, 0.7);
+    expect(r.near.pos.x).toBeCloseTo(nearAt.x, 6);
+    expect(r.near.pos.z).toBeCloseTo(nearAt.z, 6);
+    expect(r.far.pos.x).toBeCloseTo(farAt.x, 6);
+    expect(r.far.pos.z).toBeCloseTo(farAt.z, 6);
   });
 
   it('a full rally against the bot ends with a point', () => {

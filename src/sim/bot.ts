@@ -1,5 +1,5 @@
 import type { Intent, PlayerState, ShotType, ShuttleState, Side, Vec3 } from '../types';
-import { COURT, predictLanding } from '../physics';
+import { COURT, predictLanding, stepShuttle } from '../physics';
 import * as T from './tuning';
 
 export type BotLevel = 'easy' | 'medium' | 'hard';
@@ -21,6 +21,17 @@ export const BOT_TUNING = {
   slowDownRadius: 0.5,          // m distance inside which move vector scales down smoothly
   velEpsilon: 1e-4,             // m/s threshold below which velocity / speed counts as zero (dead shuttle)
   missRacketOffset: 1.8,        // racket offset when bot rolls a miss (aims off target)
+  // Doubles (only used when BotContext.partner is set)
+  doublesShortServeChance: 0.85, // probability of picking serveShort when serving in doubles
+  doublesLiftVy: 5,             // m/s shuttle vel.y above which a hit counts as a lift (the hitter's side is defending)
+  doublesFrontDepth: 2.4,       // m behind the net of the front player in front-and-back
+  doublesBackDepth: 4.6,        // m behind the net of the back player in front-and-back
+  doublesFrontBackX: 0.6,       // m sideways offset of each partner in front-and-back (opposite sides)
+  doublesSideDepth: 3.6,        // m behind the net of both players in side-by-side
+  doublesSideX: 1.5,            // m from the centre line of each player in side-by-side
+  doublesFasterMargin: 0.5,     // s of arrival time by which one partner is clearly faster and takes any shuttle
+  doublesFlightStep: 1 / 60,    // s step when timing the shuttle's flight to the floor
+  doublesFlightMax: 6,          // s longest flight timed
   easy: {
     reactionDelay: 0.45,
     missChance: 0.30,
@@ -56,6 +67,12 @@ export interface Bot {
   hasReleasedThisRally: boolean;
   serveTimer: number;
   serveChoice: 'serveShort' | 'serveLong' | null;
+  // doubles only (singles leaves these at their defaults)
+  owns: boolean;           // this bot plays the incoming shuttle (decided once, when it is hit)
+  attacking: boolean;      // this side is attacking (front-and-back) rather than defending (side-by-side)
+  firstShot: boolean;      // no shuttle flight seen yet this rally, so the next incoming one is the serve
+  receiverLatch: boolean;  // ctx.receiving as seen while the shuttle was held for the serve
+  hold: boolean;           // stand still (serve stage, or sitting out the serve as the receiver's partner)
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -75,6 +92,11 @@ export function createBot(level: BotLevel, rng: () => number = Math.random): Bot
     hasReleasedThisRally: false,
     serveTimer: 0,
     serveChoice: null,
+    owns: true,
+    attacking: true,
+    firstShot: true,
+    receiverLatch: false,
+    hold: false,
   };
 }
 
@@ -158,6 +180,83 @@ function computeServeFlickX(
     : sgn * targetWorldXDir * BOT_TUNING.serveFlickSpeed;
 }
 
+// Where the incoming shuttle will come down (the shuttle itself if no landing is known on this side).
+const landingFor = (bot: Bot, sgn: number, shuttle: ShuttleState): Vec3 =>
+  bot.cachedLanding && sgn * bot.cachedLanding.z > 0 ? bot.cachedLanding : shuttle.pos;
+
+// ---------- doubles helpers ----------
+// Both partners run these on the same positions, so they take opposite roles and exactly one claims a shuttle.
+// shortcut: ties break by slot, so two partners with the same slot and position would both claim; upgrade if slots stop being unique.
+
+const topSpeedOf = (p: PlayerState) =>
+  T.BASE_TOP_SPEED * (1 + ((p.stats.speed - T.STAT_MAX / 2) / (T.STAT_MAX / 2)) * T.SPEED_STAT_SPAN) * T.BODY_SPEED[p.stats.body];
+
+// The lower-x partner of a pair (left in side-by-side).
+const isLow = (a: PlayerState, b: PlayerState) => a.pos.x < b.pos.x || (a.pos.x === b.pos.x && a.slot < b.slot);
+// The partner nearer the net (front in front-and-back).
+const isFront = (a: PlayerState, b: PlayerState) => {
+  const za = Math.abs(a.pos.z), zb = Math.abs(b.pos.z);
+  return za < zb || (za === zb && a.slot < b.slot);
+};
+
+// Seconds the shuttle takes to reach the floor (or net) from `s`.
+function flightTime(s: ShuttleState): number {
+  const step = BOT_TUNING.doublesFlightStep;
+  for (let t = 0; t < BOT_TUNING.doublesFlightMax; t += step) {
+    const r = stepShuttle(s, step);
+    if (r.event.kind !== 'none') return t + step;
+    s = r.state;
+  }
+  return BOT_TUNING.doublesFlightMax;
+}
+
+// Where a partner stands while the other one plays the shuttle: front-and-back when attacking (opposite
+// sides, so the pair covers the open court), side-by-side when defending.
+function formationSpot(me: PlayerState, mate: PlayerState, attacking: boolean): Vec3 {
+  const sgn = sgnOf(me.side);
+  if (!attacking) {
+    return { x: (isLow(me, mate) ? -1 : 1) * BOT_TUNING.doublesSideX, y: 0, z: sgn * BOT_TUNING.doublesSideDepth };
+  }
+  const front = isFront(me, mate);
+  const side = Math.abs(mate.pos.x) > BOT_TUNING.arriveThreshold ? -Math.sign(mate.pos.x) : front ? -1 : 1;
+  return {
+    x: side * BOT_TUNING.doublesFrontBackX,
+    y: 0,
+    z: sgn * (front ? BOT_TUNING.doublesFrontDepth : BOT_TUNING.doublesBackDepth),
+  };
+}
+
+// Should `me` play the shuttle coming down at `land`? Whoever can reach it in time and the other cannot; else the clearly
+// faster one; else the one whose zone it is (left/right in side-by-side, front/back in front-and-back).
+function claims(me: PlayerState, mate: PlayerState, land: Vec3, flight: number, frontBack: boolean): boolean {
+  const sgn = sgnOf(me.side);
+  const contactZ = land.z + sgn * T.RACKET_FORWARD;
+  const eta = (p: PlayerState) =>
+    p.action === 'down' ? Infinity : Math.hypot(land.x - p.pos.x, contactZ - p.pos.z) / topSpeedOf(p);
+  const tMe = eta(me), tMate = eta(mate);
+  const canMe = tMe <= flight, canMate = tMate <= flight;
+  if (canMe !== canMate) return canMe;
+  if (Math.abs(tMe - tMate) > BOT_TUNING.doublesFasterMargin) return tMe < tMate;
+  if (frontBack) {
+    const mid = (Math.abs(me.pos.z) + Math.abs(mate.pos.z)) / 2; // zones split halfway between the partners
+    return isFront(me, mate) === (sgn * land.z < mid);
+  }
+  return isLow(me, mate) === (land.x <= (me.pos.x + mate.pos.x) / 2);
+}
+
+// World-x direction (-1, 0, 1) to flick from contact point `fromX`: away from the only opponent in singles;
+// in doubles toward the middle of the widest gap between the opponents and the side lines.
+function aimDirX(opps: PlayerState[], fromX: number): number {
+  if (opps.length < 2) return opps[0].pos.x >= 0 ? -1 : 1;
+  const edge = COURT.halfWidthDoubles;
+  const xs = [-edge, ...opps.map((o) => clamp(o.pos.x, -edge, edge)).sort((a, b) => a - b), edge];
+  let widest = 0, centre = 0;
+  for (let i = 1; i < xs.length; i++) {
+    if (xs[i] - xs[i - 1] > widest) { widest = xs[i] - xs[i - 1]; centre = (xs[i] + xs[i - 1]) / 2; }
+  }
+  return Math.sign(centre - fromX);
+}
+
 // What the bot knows about the others on court. Singles: partner null, one opponent.
 // receiving: this bot is the designated receiver of the current serve (only it may return the serve).
 export interface BotContext {
@@ -172,8 +271,7 @@ export const solo = (opponent: PlayerState, serving: boolean): BotContext =>
   ({ partner: null, opponents: [opponent], serving, receiving: !serving });
 
 export function botIntent(bot: Bot, me: PlayerState, ctx: BotContext, shuttle: ShuttleState, dt: number): Intent {
-  // shortcut: singles behaviour only (aims away from the first opponent, ignores the partner); doubles is task D3
-  const opp = ctx.opponents[0];
+  const mate = ctx.partner; // null in singles: every doubles branch below is skipped
   const serving = ctx.serving;
   const intent = emptyIntent();
   const sgn = sgnOf(me.side);
@@ -190,8 +288,8 @@ export function botIntent(bot: Bot, me: PlayerState, ctx: BotContext, shuttle: S
     bot.lastVelZSign = 0;
     bot.hasReleasedThisRally = false;
     if (!bot.serveChoice) {
-      bot.serveChoice =
-        !cfg.allowAllShots || bot.rng() < BOT_TUNING.shortServeChance ? 'serveShort' : 'serveLong';
+      const shortChance = mate ? BOT_TUNING.doublesShortServeChance : BOT_TUNING.shortServeChance;
+      bot.serveChoice = !cfg.allowAllShots || bot.rng() < shortChance ? 'serveShort' : 'serveLong';
       bot.serveTimer = 0;
     }
     const aim = computeRacketAim(me, shuttle.pos, true);
@@ -223,6 +321,9 @@ export function botIntent(bot: Bot, me: PlayerState, ctx: BotContext, shuttle: S
     bot.cachedLanding = null;
     bot.plannedShot = null;
     bot.chargeTime = 0;
+    bot.firstShot = true; // the shuttle is held for a serve: the next flight is the serve
+    bot.receiverLatch = ctx.receiving;
+    bot.hold = mate !== null;
   }
 
   const velZSign = Math.abs(shuttle.vel.z) > BOT_TUNING.velEpsilon ? Math.sign(shuttle.vel.z) : 0;
@@ -231,6 +332,9 @@ export function botIntent(bot: Bot, me: PlayerState, ctx: BotContext, shuttle: S
 
   if (velZSign !== 0 && velZSign !== bot.lastVelZSign) {
     bot.lastVelZSign = velZSign;
+    bot.hold = false;
+    // A lift (shuttle going up) hands the attack to the side that did not hit it.
+    bot.attacking = (shuttle.vel.y > BOT_TUNING.doublesLiftVy) === incoming;
     if (incoming) {
       bot.cachedLanding = predictLanding(shuttle);
       bot.reactionTimer = cfg.reactionDelay;
@@ -238,27 +342,34 @@ export function botIntent(bot: Bot, me: PlayerState, ctx: BotContext, shuttle: S
       bot.plannedShot = chooseShotForSituation(bot, me, shuttle, bot.cachedLanding);
       bot.chargeTime = 0;
       bot.hasReleasedThisRally = false;
+      if (mate) {
+        // Decided once, from one snapshot both partners see, so exactly one of two bots goes for it. The serve goes
+        // to the designated receiver only; its partner holds its spot.
+        const mayReturn = ctx.receiving || bot.receiverLatch;
+        bot.owns = bot.firstShot
+          ? mayReturn
+          : claims(me, mate, landingFor(bot, sgn, shuttle), flightTime(shuttle), bot.attacking);
+        bot.hold = bot.firstShot && !mayReturn;
+      }
     } else {
       bot.cachedLanding = null;
       bot.plannedShot = null;
       bot.chargeTime = 0;
       bot.hasReleasedThisRally = false;
     }
+    bot.firstShot = false;
   }
 
   // ---------- MOVEMENT ----------
-  const basePos = { x: 0, y: 0, z: sgn * BOT_TUNING.baseDepth };
-  let moveTarget = basePos;
+  const basePos = mate ? formationSpot(me, mate, bot.attacking) : { x: 0, y: 0, z: sgn * BOT_TUNING.baseDepth };
+  let moveTarget = bot.hold ? me.pos : basePos;
 
-  if (incoming && !bot.hasReleasedThisRally) {
+  if (incoming && !bot.hasReleasedThisRally && bot.owns) {
     if (bot.reactionTimer > 0) {
       bot.reactionTimer = Math.max(0, bot.reactionTimer - dt);
     }
     if (bot.reactionTimer <= 0) {
-      const land =
-        bot.cachedLanding && sgn * bot.cachedLanding.z > 0
-          ? bot.cachedLanding
-          : shuttle.pos;
+      const land = landingFor(bot, sgn, shuttle);
       // Stand slightly behind the shuttle's contact point so the racket plane (RACKET_FORWARD in front) meets it
       moveTarget = {
         x: land.x,
@@ -294,7 +405,7 @@ export function botIntent(bot: Bot, me: PlayerState, ctx: BotContext, shuttle: S
     intent.racket = aim;
   }
 
-  if (incoming && bot.reactionTimer <= 0 && !bot.hasReleasedThisRally) {
+  if (incoming && bot.owns && bot.reactionTimer <= 0 && !bot.hasReleasedThisRally) {
     const shot = bot.plannedShot ?? chooseShotForSituation(bot, me, shuttle, bot.cachedLanding);
     bot.plannedShot = shot;
 
@@ -328,8 +439,8 @@ export function botIntent(bot: Bot, me: PlayerState, ctx: BotContext, shuttle: S
     const closeEnoughToSwing =
       distToShuttle <= BOT_TUNING.releaseDist || nextDist <= BOT_TUNING.releaseDist;
 
-    // Flick away from opponent's X position
-    const awayWorldX = opp.pos.x >= 0 ? -1 : 1;
+    // Flick away from the opponent (singles) or into the widest gap between the opponents (doubles)
+    const awayWorldX = aimDirX(ctx.opponents, shuttle.pos.x);
     const flickX = cfg.flickSpeed > 0 ? sgn * awayWorldX * cfg.flickSpeed : 0;
 
     if (closeEnoughToSwing) {

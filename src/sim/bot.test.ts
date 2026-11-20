@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { createBot, botIntent, BOT_TUNING, solo } from './bot';
+import { createBot, botIntent, BOT_TUNING, solo, type Bot, type BotContext } from './bot';
 import { createPlayer, stepPlayer, setRandom } from './index';
-import { predictLanding, stepShuttle, isInServiceBox } from '../physics';
-import type { ServiceCourt, ShotType, ShuttleState, Stats } from '../types';
+import { COURT, predictLanding, stepShuttle, isInServiceBox } from '../physics';
+import type { HitResult, Intent, PlayerState, ServiceCourt, ShotType, ShuttleState, Side, Slot, Stats } from '../types';
 
 const balancedStats: Stats = { gender: 'male', body: 'balanced', speed: 5, power: 5, recovery: 5, stamina: 5 };
 
@@ -227,5 +227,192 @@ describe('bot AI', () => {
         expect(isInServiceBox(landing!, 'near', court)).toBe(true);
       }
     }
+  });
+});
+
+// ---------- doubles ----------
+
+const at = (side: Side, slot: Slot, x: number, z: number) => createPlayer(balancedStats, side, { x, y: 0, z }, slot);
+const swings = (i: Intent) => i.release !== null || i.basicSwing !== null || i.netShot;
+const dblCtx = (mate: PlayerState, opps: PlayerState[], receiving = false, serving = false): BotContext =>
+  ({ partner: mate, opponents: opps, serving, receiving });
+const oppsNear = () => [at('near', 0, -1.5, 3.6), at('near', 1, 1.5, 3.6)];
+// Shuttle the far side has just hit away from itself: a smash (vy < 0) or a lift (vy > 0).
+const outgoing = (vy: number): ShuttleState => ({ pos: { x: 0, y: 3, z: 1 }, vel: { x: 0, y: vy, z: 8 } });
+
+// Two bots on the far side, both intents read from the same pre-step state (as the game loop does).
+class Pair {
+  p: [PlayerState, PlayerState];
+  bots: [Bot, Bot];
+  constructor(a: PlayerState, b: PlayerState, level: 'easy' | 'medium' | 'hard' = 'hard') {
+    this.p = [a, b];
+    this.bots = [createBot(level, () => 0.5), createBot(level, () => 0.5)];
+  }
+  step(shuttle: ShuttleState, dt: number, opps: PlayerState[], receiving: [boolean, boolean] = [false, false]) {
+    const intents = [0, 1].map((k) =>
+      botIntent(this.bots[k], this.p[k], dblCtx(this.p[1 - k], opps, receiving[k]), shuttle, dt)) as [Intent, Intent];
+    const stepped = [0, 1].map((k) => stepPlayer(this.p[k], intents[k], shuttle, dt, 0.7));
+    this.p = [stepped[0].player, stepped[1].player];
+    return { intents, hit: (stepped[0].hit ?? stepped[1].hit) as HitResult | null };
+  }
+  hold(shuttle: ShuttleState, seconds: number, opps: PlayerState[]) {
+    for (let i = 0; i < seconds * 60; i++) this.step(shuttle, 1 / 60, opps);
+  }
+}
+
+describe('doubles bot', () => {
+  it('stands front-and-back when attacking and side-by-side when defending', () => {
+    for (const [vy, frontBack] of [[-8, true], [8, false]] as const) {
+      const pair = new Pair(at('far', 0, -0.5, -3.5), at('far', 1, 0.5, -3.5));
+      pair.hold(outgoing(vy), 5, oppsNear());
+      const [a, b] = pair.p;
+      if (frontBack) {
+        expect(Math.abs(Math.abs(a.pos.z) - Math.abs(b.pos.z))).toBeGreaterThan(1.5);
+      } else {
+        expect(Math.abs(Math.abs(a.pos.z) - Math.abs(b.pos.z))).toBeLessThan(0.3);
+        expect(Math.abs(a.pos.x - b.pos.x)).toBeGreaterThan(2.5);
+      }
+    }
+  });
+
+  it('switches formation when the opponents lift the shuttle versus when they hit it down', () => {
+    const opps = oppsNear();
+    // Both settle side by side after our lift; the frame after the opponents hit, the owner is still in its
+    // reaction delay, so any movement is the other partner changing formation.
+    const firstMove = (incoming: ShuttleState) => {
+      const pair = new Pair(at('far', 0, -1.5, -3.6), at('far', 1, 1.5, -3.6));
+      pair.hold(outgoing(8), 3, opps);
+      const r = pair.step(incoming, 1 / 120, opps);
+      return Math.max(...r.intents.map((i) => Math.hypot(i.move.x, i.move.z)));
+    };
+    expect(firstMove({ pos: { x: 0, y: 2.6, z: 3 }, vel: { x: 0, y: 9, z: -12 } })).toBeGreaterThan(0.5); // lift: attack
+    expect(firstMove({ pos: { x: 0, y: 2.6, z: 3 }, vel: { x: 0, y: -6, z: -30 } })).toBe(0); // smash: stay side by side
+  });
+
+  it('never has both partners swing at the same incoming shuttle over a scripted rally', () => {
+    const opps = oppsNear();
+    const launches: ShuttleState[] = [
+      [0, 0, 9, -12], [0, -2, 9, -12], [0, 3, 9, -12], [0, 0, 12, -16], [0, -4, 5, -14],
+      [0, 5, 6, -10], [1, 0, 4, -9], [-1, 0, 3, -8], [0, 0, 2, -6], [2, -3, 6, -9],
+      [0.5, 1, 2, -22], [1.5, -3, 0, -24], [0, 0, 3, -18], [0, 0, 0, -16],
+    ].map(([x, vx, vy, vz]) => ({ pos: { x, y: 2.6, z: 3 }, vel: { x: vx, y: vy, z: vz } }));
+    const pair = new Pair(at('far', 0, -1.5, -3.6), at('far', 1, 1.5, -3.6));
+    let handled = 0;
+    const everSwung = new Set<number>();
+    launches.forEach((launch, n) => {
+      pair.hold(outgoing(n % 2 ? 8 : -8), 1.5, opps); // recover to formation after our last shot
+      const swingers = new Set<number>();
+      let shuttle = launch;
+      for (let i = 0; i < 400; i++) {
+        const r = pair.step(shuttle, 1 / 120, opps);
+        r.intents.forEach((it, k) => { if (swings(it)) { swingers.add(k); everSwung.add(k); } });
+        if (r.hit) { handled++; break; }
+        const s = stepShuttle(shuttle, 1 / 120);
+        if (s.event.kind !== 'none') break;
+        shuttle = s.state;
+      }
+      expect(swingers.size, `launch ${n}`).toBeLessThanOrEqual(1);
+    });
+    expect(handled).toBeGreaterThanOrEqual(launches.length - 3);
+    expect(everSwung.size).toBe(2); // the work is shared, not left to one partner
+  });
+
+  it('the receiver plays the serve and the receiving partner holds its spot without swinging', () => {
+    const opps = [at('near', 0, 1.0, 2.4), at('near', 1, -1.5, 5)];
+    const receiver = at('far', 0, -1.2, -4.4);
+    const partner = at('far', 1, 0.5, -3.0); // nearer to where the serve lands (x 0.27, z -3.3)
+    const pair = new Pair(receiver, partner);
+    const serve: ShuttleState = { pos: { x: 1.0, y: 1.1, z: 2.2 }, vel: { x: -1.2, y: 8, z: -9 } };
+    const landing = predictLanding(serve);
+    expect(landing).not.toBeNull();
+    expect(landing!.z).toBeLessThan(-COURT.shortServiceLine);
+    const rest: ShuttleState = { pos: serve.pos, vel: { x: 0, y: 0, z: 0 } };
+    for (let i = 0; i < 30; i++) pair.step(rest, 1 / 60, opps, [true, false]); // serve stage: shuttle held
+    const start = { ...pair.p[1].pos };
+    let shuttle = serve;
+    let receiverSwung = false;
+    for (let i = 0; i < 400; i++) {
+      const r = pair.step(shuttle, 1 / 120, opps, [false, false]); // receiving flag drops once the serve is in the air
+      expect(swings(r.intents[1])).toBe(false);
+      expect(r.intents[1].charging).toBeNull();
+      if (swings(r.intents[0])) receiverSwung = true;
+      if (r.hit) break;
+      shuttle = stepShuttle(shuttle, 1 / 120).state;
+    }
+    expect(receiverSwung).toBe(true);
+    expect(pair.p[1].pos.x).toBeCloseTo(start.x, 5);
+    expect(pair.p[1].pos.z).toBeCloseTo(start.z, 5);
+  });
+
+  // Plays one incoming shuttle with a bot whose partner never moves (a human we cannot see into).
+  const playWithStaticMate = (mate: PlayerState) => {
+    const bot = createBot('hard', () => 0.5);
+    let me = at('far', 0, -1.5, -3.6);
+    const ctx = dblCtx(mate, oppsNear());
+    botIntent(bot, me, ctx, outgoing(-8), 0.05);
+    let shuttle: ShuttleState = { pos: { x: 0, y: 2.6, z: 3 }, vel: { x: 3, y: 9, z: -12 } }; // lands about x = 1.7
+    let swung = false;
+    for (let i = 0; i < 400; i++) {
+      const intent = botIntent(bot, me, ctx, shuttle, 1 / 120);
+      if (swings(intent)) swung = true;
+      const r = stepPlayer(me, intent, shuttle, 1 / 120, 0.7);
+      me = r.player;
+      if (r.hit) break;
+      const s = stepShuttle(shuttle, 1 / 120);
+      if (s.event.kind !== 'none') break;
+      shuttle = s.state;
+    }
+    return { swung, me };
+  };
+
+  it('with a partner it cannot see into (human), leaves shuttles in the partner zone', () => {
+    const { swung, me } = playWithStaticMate(at('far', 1, 1.5, -3.6));
+    expect(swung).toBe(false);
+    expect(me.pos.x).toBeLessThan(0); // stayed on its own half
+  });
+
+  it('takes a shuttle in the partner zone when the partner cannot reach it', () => {
+    const { swung } = playWithStaticMate({ ...at('far', 1, 1.5, -3.6), action: 'down' });
+    expect(swung).toBe(true);
+  });
+
+  it('doubles serves are mostly short', () => {
+    const rng = makeLcg(7);
+    const server = at('far', 0, -1.0, -2.5);
+    const mate = at('far', 1, 1.0, -4.5);
+    const opps = oppsNear();
+    const held: ShuttleState = { pos: { x: -1.0, y: 1.0, z: -2.0 }, vel: { x: 0, y: 0, z: 0 } };
+    const share = (ctxOf: () => BotContext) => {
+      let short = 0;
+      for (let i = 0; i < 400; i++) {
+        const intent = botIntent(createBot('medium', rng), server, ctxOf(), held, 0.01);
+        if (intent.charging === 'serveShort') short++;
+      }
+      return short / 400;
+    };
+    const doubles = share(() => dblCtx(mate, opps, false, true));
+    expect(doubles).toBeGreaterThan(0.75);
+    expect(doubles).toBeLessThan(0.95);
+    expect(doubles).toBeGreaterThan(share(() => solo(opps[0], true)));
+  });
+
+  it('flicks toward the widest gap between the opponents', () => {
+    const flick = (xs: [number, number], contactX: number) => {
+      const bot = createBot('hard', () => 0.1);
+      const me = at('far', 0, contactX, -4.5);
+      const mate = at('far', 1, contactX + 2.2, -4.5);
+      const opps = [at('near', 0, xs[0], 3.6), at('near', 1, xs[1], 3.6)];
+      const ctx = dblCtx(mate, opps);
+      botIntent(bot, me, ctx, outgoing(-8), 0.05);
+      const shuttle: ShuttleState = { pos: { x: contactX, y: 2.3, z: -4.0 }, vel: { x: 0, y: -0.5, z: -2.0 } };
+      const intent = botIntent(bot, me, ctx, shuttle, 0.2);
+      expect(intent.release).not.toBeNull();
+      return intent.racketVel.x;
+    };
+    // the far side looks toward +z, so a world-x move toward -x is a positive racketVel.x
+    expect(flick([2, 2.5], 0.2)).toBeGreaterThan(0);    // opponents right: the widest gap is left of them
+    expect(flick([-2.5, -2], -0.2)).toBeLessThan(0);    // opponents left: the gap is right of them
+    expect(flick([-1.5, 1.5], 0.4)).toBeGreaterThan(0); // widest gap is the middle (x = 0)
+    expect(flick([-1, 2.5], -0.5)).toBeLessThan(0);     // widest gap is the middle, centred at 0.75
   });
 });

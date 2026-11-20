@@ -5,7 +5,8 @@ import { createRenderer } from '../render';
 import { predictLanding, stepShuttle } from '../physics';
 import { FORMAT_3X15, createMatch } from '../rules';
 import { chargeLevel, createPlayer, recoverBetweenPoints, stepPlayer, validateStats } from '../sim';
-import { SERVE_MAX_CONTACT } from '../sim/tuning';
+import { applyAssist } from '../sim/assist';
+import { ASSIST_GAME_SPEED, SERVE_MAX_CONTACT } from '../sim/tuning';
 import { createHud, PRESETS, type Settings } from '../ui';
 import type { Intent, MatchState, PlayerState, ServiceCourt, ShuttleState, Stats, Vec3, WorldView } from '../types';
 import { aimServe, serveSpots, STEP } from './rally';
@@ -37,6 +38,7 @@ const heldShuttle = (p: PlayerState): ShuttleState => ({
 export function startTutorial(root: HTMLElement, setup: TutorialSetup, onAgain: () => void): void {
   const { settings } = setup;
   const assist = settings.hitAssist / 100;
+  const speed = ASSIST_GAME_SPEED[settings.mode];
   const humanStats = validateStats(setup.stats) === null ? setup.stats : PRESETS.balanced;
 
   const container = document.createElement('div');
@@ -207,7 +209,9 @@ export function startTutorial(root: HTMLElement, setup: TutorialSetup, onAgain: 
     }
 
     // flight: the feeder's shuttle is on its way, the player may hit it at any time.
-    const out = stepPlayer(near, i, shuttle, STEP, assist);
+    // The dive drill stays manual: auto-move would play it for the player.
+    const mine = tut.current.id === 'dive' ? i : applyAssist(i, near, shuttle, settings.mode);
+    const out = stepPlayer(near, mine, shuttle, STEP, assist);
     near = out.player;
     trackDive();
     if (out.hit && !attemptRecorded) {
@@ -344,13 +348,13 @@ export function startTutorial(root: HTMLElement, setup: TutorialSetup, onAgain: 
       acc = 0;
       human = null;
     } else {
-      acc += dt;
+      acc += dt * speed;
     }
     const n = Math.floor(acc / STEP + 1e-9);
     acc -= n * STEP;
     if (n > 0) {
       input.setServing(tut.current.id === 'serve' && stage === 'serve');
-      human = input.intent(n * STEP);
+      human = input.intent((n * STEP) / speed);
       for (let k = 0; k < n && !done; k++) tick(k === 0 ? human : dropEdges(human));
     }
     if (done) return;

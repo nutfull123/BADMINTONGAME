@@ -1,19 +1,18 @@
-# Review of agent/agy (f2 footwork render, camera, zoom) — reviewer: Sonnet (xf2)
+# Review of agent/agy (D1 doubles rules, BWF Law 11) — reviewer: Sonnet (xD1)
 
 ## Standards
-- src/render/pose.ts:~58-75,~515 - JUDGEMENT - unrelated edits (removed comments, clamp helper)
-- src/render/index.ts:511 - JUDGEMENT - PerspectiveCamera(50) hardcoded; use CAM_FOV_DEG
-- src/render/pose.ts:~437-500 - JUDGEMENT - magic framing bounds
-- HARD: none
+- src/rules/index.ts:112 - JUDGEMENT - otherSlot defined after awardRally uses it (works at runtime)
+- HARD: none (only src/rules touched, types unchanged, pure)
 
 ## Spec
-- split / chasse / crossover / lunge / recover poses: PASS (chasse symmetric, ignores dir — JUDGEMENT)
-- camera: all four baseline corners inside view at 16:9 and 16:10, camX in [-2.59, 2.59] (reviewer projected with real THREE)
-- setZoom: clamps 0.6..1.6, eased ~0.2 s
+- serving side wins: swaps only its own rightCourt, same server (Law 11.3.1)
+- receiving side wins: no swap, server from new score parity (Law 11.3.2)
+- new game resets rightCourt; singles never changes rightCourt
+- Law 11.4 sequence N1 -> F2 -> N2 -> F1 -> N1 tested
+- 8-rally worked example matches the research table row by row
 
 ## Checks
-npx vitest run -> pass (134)
+npx vitest run src/rules -> pass (24)
 npx tsc --noEmit -> pass
-npx vite build -> pass
 
-APPROVE b3733bb
+APPROVE 5a6cea3

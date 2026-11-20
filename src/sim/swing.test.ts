@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { predictLanding } from '../physics';
+import { predictLanding, stepShuttle } from '../physics';
 import type { BodyType, HitResult, Intent, PlayerState, ShuttleState, Stats, Vec3 } from '../types';
 import { createPlayer, setRandom, stepPlayer } from './index';
 
@@ -48,6 +48,31 @@ function swing(first: Partial<Intent>, o: SwingOpts = {}) {
 }
 const land = (h: HitResult) => predictLanding(h.launch)!;
 const noSpread = () => setRandom(() => 0.5);
+
+describe('exchange', () => {
+  it('a clear flies across with real shuttle physics and the far player returns it', () => {
+    noSpread();
+    const first = swing({ release: 'clear', chargeTime: 1 }, { racket: { x: 0, y: 1 } }).hit!;
+    const down = land(first);
+    let far = createPlayer(stats(), 'far', { x: down.x, y: 0, z: down.z - 0.5 });
+    let s = first.launch;
+    let fired = false;
+    let ret: HitResult | null = null;
+    for (let i = 0; i < 120 * 4 && !ret; i++) {
+      const lowEnough = s.pos.y < 1.2 && s.vel.y < 0;
+      const r = stepPlayer(far, { ...idle, racket: { x: 0, y: -1 }, release: lowEnough && !fired ? 'clear' : null }, s, DT, 1);
+      far = r.player;
+      fired = fired || lowEnough;
+      ret = r.hit;
+      const f = stepShuttle(s, DT);
+      s = f.state;
+      expect(f.event.kind === 'floor' && !ret).toBe(false); // it must be hit before it lands
+    }
+    expect(ret).not.toBeNull();
+    expect(Object.values(ret!.launch.vel).every(Number.isFinite)).toBe(true);
+    expect(land(ret!).z).toBeGreaterThan(4); // cleared back deep into the near half
+  });
+});
 
 describe('hit detection', () => {
   const E: Partial<Intent> = { basicSwing: 'forehand' };

@@ -76,6 +76,7 @@ export const GRAVITY = 9.81; // m/s^2 for the player's jump arc
 export const DIVE_DISTANCE = 1.8; // m lunged
 export const DIVE_TIME = 0.35; // s the lunge lasts (the one chance to lift)
 export const DIVE_RACKET_MAX_Y = 0.5; // racket head height cap while diving
+export const DOWN_RACKET_Y = 0.15; // racket head height while lying down
 export const DIVE_RADIUS_BONUS = 0.3; // m of extra hit radius while diving
 export const DIVE_LIFT_CHARGE = 0.5; // the lift from a dive is a clear at this charge
 export const GET_UP_BASE = 12; // presses to get up at recovery 0

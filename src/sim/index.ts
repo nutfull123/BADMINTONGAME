@@ -1,7 +1,7 @@
 // Player movement, stats, stamina, racket plane, swing, hits and dive. Pure: no three, no DOM.
 // facing f points along (sin f, 0, netDir * cos f) where netDir = -1 for near, +1 for far.
 import type { HitResult, Intent, PlayerAction, PlayerState, ShotType, ShuttleState, Side, Stats, Vec3 } from '../types';
-import { COURT } from '../physics';
+import { COURT, predictLanding } from '../physics';
 import { launchShuttle } from './shots';
 import * as T from './tuning';
 
@@ -78,6 +78,24 @@ function racketHeadFor(p: PlayerState, rx: number, ry: number, serve: boolean, d
 }
 
 const costScale = (stat: number) => 1 + (T.STAT_MAX / 2 - stat) * T.STAMINA_COST_SPAN;
+const jumpHeight = (s: Stats, charge: number) =>
+  lerp(T.JUMP_MIN, T.JUMP_MAX, clamp(charge / T.JUMP_CHARGE_FULL, 0, 1)) * T.BODY_JUMP[s.body] *
+  (1 + (s.power - T.STAT_MAX / 2) * T.JUMP_POWER_SPAN);
+const regenPerSecond = (s: Stats, fatigue: number) =>
+  T.STAMINA_REGEN * (1 + (s.stamina - T.STAT_MAX / 2) * T.STAMINA_REGEN_SPAN) * (1 - T.FATIGUE_REGEN_LOSS * fatigue);
+
+// Between points: part of the stamina and fatigue comes back, any dive or swing state is cleared, and the player is
+// put back at `at` (the game picks the serve/receive spot).
+export function recoverBetweenPoints(p: PlayerState, at: Vec3): PlayerState {
+  const q: SimPlayer = {
+    ...p, pos: { ...at }, vel: { x: 0, y: 0, z: 0 }, facing: 0, action: 'idle', getUpPressesLeft: 0,
+    staminaNow: Math.min(1, p.staminaNow + T.BETWEEN_POINTS_STAMINA),
+    fatigue: Math.max(0, p.fatigue - T.BETWEEN_POINTS_FATIGUE),
+    swing: null, swingCooldown: 0, diveT: 0, diveSwung: false,
+  };
+  q.racketHead = racketHeadFor(q, 0, 0, false, false);
+  return q;
+}
 
 export function stepPlayer(
   p0: PlayerState, intent: Intent, shuttle: ShuttleState, dt: number, assist: number,
@@ -85,42 +103,99 @@ export function stepPlayer(
   const p: SimPlayer = { ...p0 };
   const { stats } = p;
   const sgn = sgnOf(p.side);
+  const cost = costScale(stats.stamina);
+
+  // ----- down after a dive: only get-up presses count -----
+  if (p.action === 'down') {
+    p.getUpPressesLeft = Math.max(0, p.getUpPressesLeft - (intent.dive ? 1 : 0));
+    p.action = p.getUpPressesLeft === 0 ? 'idle' : 'down';
+    p.vel = { x: 0, y: 0, z: 0 };
+    p.staminaNow = clamp(p.staminaNow + regenPerSecond(stats, p.fatigue) * dt, 0, 1);
+    p.fatigue = clamp(p.fatigue - T.FATIGUE_DECAY * dt, 0, 1);
+    p.swing = null;
+    p.racketHead = { x: p.pos.x, y: T.DOWN_RACKET_Y, z: p.pos.z };
+    return { player: p, hit: null };
+  }
+
   const pos = { ...p.pos };
   const vel = { ...p.vel };
   const grounded = pos.y <= 0;
   let stamina = p.staminaNow;
   let fatigue = p.fatigue;
   const charging = intent.charging !== null;
-
-  // ----- horizontal movement -----
-  const speedMul = 1 + ((stats.speed - T.STAT_MAX / 2) / (T.STAT_MAX / 2)) * T.SPEED_STAT_SPAN;
-  const tiredMul = lerp(T.LOW_STAMINA_SPEED, 1, clamp(stamina / T.LOW_STAMINA, 0, 1));
-  const top = T.BASE_TOP_SPEED * speedMul * T.BODY_SPEED[stats.body] * tiredMul *
-    (1 - T.FATIGUE_SPEED_LOSS * fatigue) * (charging ? T.CHARGE_MOVE_FACTOR : 1);
-  const accel = T.BASE_ACCEL * speedMul * T.BODY_ACCEL[stats.body] * (grounded ? 1 : T.AIR_CONTROL);
-  const turnAccel = accel * T.BODY_TURN[stats.body];
+  let swing: Swing | null = p.swing ? { ...p.swing } : null;
+  let cooldown = Math.max(0, (p.swingCooldown ?? 0) - dt);
+  let diveT = p.diveT ?? 0;
+  let diveDir = p.diveDir ?? { x: 0, z: 0 };
+  let diveSwung = p.diveSwung ?? false;
 
   let mx = clamp(intent.move.x, -1, 1), mz = clamp(intent.move.z, -1, 1);
   const mlen = Math.hypot(mx, mz);
   if (mlen < T.MOVE_DEADZONE) { mx = 0; mz = 0; }
   else if (mlen > 1) { mx /= mlen; mz /= mlen; }
-  let dvx = mx * top - vel.x, dvz = mz * top - vel.z;
-  const sp = Math.hypot(vel.x, vel.z);
-  if (sp > 0.5) {
-    // speeding up/braking along the current heading uses accel; changing heading is slower for heavy bodies
-    const ux = vel.x / sp, uz = vel.z / sp;
-    const along = dvx * ux + dvz * uz;
-    let px = dvx - along * ux, pz = dvz - along * uz;
-    const plen = Math.hypot(px, pz);
-    if (plen > turnAccel * dt) { px *= (turnAccel * dt) / plen; pz *= (turnAccel * dt) / plen; }
-    const a = clamp(along, -accel * dt, accel * dt);
-    dvx = a * ux + px; dvz = a * uz + pz;
-  } else {
-    const len = Math.hypot(dvx, dvz);
-    if (len > accel * dt) { dvx *= (accel * dt) / len; dvz *= (accel * dt) / len; }
+
+  // ----- dive start: lunge along the move input, or toward the shuttle's landing spot -----
+  if (intent.dive && diveT <= 0 && grounded && stamina > 0) {
+    let dx = mx, dz = mz;
+    if (mx === 0 && mz === 0) {
+      const to = predictLanding(shuttle) ?? shuttle.pos;
+      dx = to.x - pos.x; dz = to.z - pos.z;
+    }
+    const len = Math.hypot(dx, dz);
+    diveDir = len > 1e-6 ? { x: dx / len, z: dz / len } : { x: 0, z: -sgn };
+    diveT = T.DIVE_TIME;
+    diveSwung = false;
+    swing = null;
+    cooldown = 0;
+    stamina -= T.DIVE_COST * cost;
   }
-  vel.x += dvx; vel.z += dvz;
-  pos.x += vel.x * dt; pos.z += vel.z * dt;
+  const diving = diveT > 0;
+
+  // ----- jump: charge sets the height; takes off when Space is released -----
+  if (intent.jumpRelease && grounded && !diving && stamina > 0) {
+    vel.y = Math.sqrt(2 * T.GRAVITY * jumpHeight(stats, intent.jumpCharge));
+    stamina -= T.JUMP_COST * cost;
+  }
+  if (vel.y > 0 || pos.y > 0) {
+    vel.y -= T.GRAVITY * dt;
+    pos.y += vel.y * dt;
+    if (pos.y <= 0) { pos.y = 0; vel.y = 0; }
+  }
+
+  // ----- horizontal movement -----
+  if (diving) {
+    const step = Math.min(dt, diveT);
+    vel.x = (diveDir.x * T.DIVE_DISTANCE) / T.DIVE_TIME;
+    vel.z = (diveDir.z * T.DIVE_DISTANCE) / T.DIVE_TIME;
+    pos.x += vel.x * step;
+    pos.z += vel.z * step;
+    diveT -= step;
+    if (diveT < 1e-9) diveT = 0;
+  } else {
+    const speedMul = 1 + ((stats.speed - T.STAT_MAX / 2) / (T.STAT_MAX / 2)) * T.SPEED_STAT_SPAN;
+    const tiredMul = lerp(T.LOW_STAMINA_SPEED, 1, clamp(stamina / T.LOW_STAMINA, 0, 1));
+    const top = T.BASE_TOP_SPEED * speedMul * T.BODY_SPEED[stats.body] * tiredMul *
+      (1 - T.FATIGUE_SPEED_LOSS * fatigue) * (charging ? T.CHARGE_MOVE_FACTOR : 1);
+    const accel = T.BASE_ACCEL * speedMul * T.BODY_ACCEL[stats.body] * (grounded ? 1 : T.AIR_CONTROL);
+    const turnAccel = accel * T.BODY_TURN[stats.body];
+    let dvx = mx * top - vel.x, dvz = mz * top - vel.z;
+    const sp = Math.hypot(vel.x, vel.z);
+    if (sp > 0.5) {
+      // speeding up/braking along the current heading uses accel; changing heading is slower for heavy bodies
+      const ux = vel.x / sp, uz = vel.z / sp;
+      const along = dvx * ux + dvz * uz;
+      let px = dvx - along * ux, pz = dvz - along * uz;
+      const plen = Math.hypot(px, pz);
+      if (plen > turnAccel * dt) { px *= (turnAccel * dt) / plen; pz *= (turnAccel * dt) / plen; }
+      const a = clamp(along, -accel * dt, accel * dt);
+      dvx = a * ux + px; dvz = a * uz + pz;
+    } else {
+      const len = Math.hypot(dvx, dvz);
+      if (len > accel * dt) { dvx *= (accel * dt) / len; dvz *= (accel * dt) / len; }
+    }
+    vel.x += dvx; vel.z += dvz;
+    pos.x += vel.x * dt; pos.z += vel.z * dt;
+  }
 
   // stay inside own half
   const depth = clamp(sgn * pos.z, T.NET_CLEARANCE, COURT.halfLength + T.HALF_MARGIN_BACK);
@@ -129,48 +204,49 @@ export function stepPlayer(
   if (Math.abs(pos.x) > wide) { pos.x = Math.sign(pos.x) * wide; vel.x = 0; }
 
   // ----- stamina and fatigue -----
-  const cost = costScale(stats.stamina);
   const running = Math.hypot(vel.x, vel.z);
-  if (charging) stamina -= T.CHARGE_DRAIN * cost * dt;
-  else stamina += T.STAMINA_REGEN * (1 + (stats.stamina - T.STAT_MAX / 2) * T.STAMINA_REGEN_SPAN) *
-    (1 - T.FATIGUE_REGEN_LOSS * fatigue) * dt;
+  if (!diving) {
+    if (charging) stamina -= T.CHARGE_DRAIN * cost * dt;
+    else stamina += regenPerSecond(stats, fatigue) * dt;
+  }
   if (running > T.MOVING_SPEED) fatigue += T.FATIGUE_BUILD * (running / T.BASE_TOP_SPEED) * cost * dt;
   else fatigue -= T.FATIGUE_DECAY * dt;
 
   // ----- facing: turn toward the shuttle when it is on this side, else toward the net -----
-  const netDir = -sgn;
   const onMySide = sgn * shuttle.pos.z > 0;
   const want = onMySide
-    ? clamp(Math.atan2(shuttle.pos.x - pos.x, (shuttle.pos.z - pos.z) * netDir), -T.FACING_LIMIT, T.FACING_LIMIT)
+    ? clamp(Math.atan2(shuttle.pos.x - pos.x, (shuttle.pos.z - pos.z) * -sgn), -T.FACING_LIMIT, T.FACING_LIMIT)
     : 0;
   const turn = T.TURN_RATE * T.BODY_TURN[stats.body] * dt;
-  const facing = p.facing + clamp(want - p.facing, -turn, turn);
 
   p.pos = pos;
   p.vel = vel;
-  p.facing = facing;
+  p.facing += clamp(want - p.facing, -turn, turn);
   p.staminaNow = clamp(stamina, 0, 1);
   p.fatigue = clamp(fatigue, 0, 1);
 
-  // ----- swing: starts on release / net shot / basic swing, lasts SWING_WINDOW -----
-  let swing: Swing | null = p.swing ? { ...p.swing } : null;
-  let cooldown = Math.max(0, (p.swingCooldown ?? 0) - dt);
-  if (!swing && cooldown <= 0) {
+  // ----- swing: starts on release / net shot / basic swing, lasts SWING_WINDOW; a dive gets one lift -----
+  if (!swing && cooldown <= 0 && !(diving && diveSwung)) {
     const shot: ShotType | null = intent.release ?? (intent.netShot ? 'net' : intent.basicSwing ? 'basic' : null);
     if (shot) {
       const flat = shot === 'basic' || shot === 'net';
-      swing = { t: 0, shot, charge: flat ? 0 : chargeLevel(p, intent.chargeTime), basic: shot === 'basic' ? intent.basicSwing : null, lift: false, best: null };
+      swing = {
+        t: 0, shot: diving ? 'clear' : shot, lift: diving, best: null,
+        charge: diving ? T.DIVE_LIFT_CHARGE : flat ? 0 : chargeLevel(p, intent.chargeTime),
+        basic: shot === 'basic' && !diving ? intent.basicSwing : null,
+      };
+      if (diving) diveSwung = true;
       cooldown = T.SWING_COOLDOWN;
     }
   }
   const serving = isServe(swing?.shot ?? null) || isServe(intent.charging) || isServe(intent.release);
-  p.racketHead = racketHeadFor(p, intent.racket.x, intent.racket.y, serving, false);
+  p.racketHead = racketHeadFor(p, intent.racket.x, intent.racket.y, serving, diving);
 
   let hit: HitResult | null = null;
   if (swing) {
     const prev = { x: shuttle.pos.x - shuttle.vel.x * dt, y: shuttle.pos.y - shuttle.vel.y * dt, z: shuttle.pos.z - shuttle.vel.z * dt };
     const { d, point } = nearest(p.racketHead, prev, shuttle.pos);
-    const radius = T.HIT_RADIUS_BASE + clamp(assist, 0, 1) * T.HIT_RADIUS_ASSIST;
+    const radius = T.HIT_RADIUS_BASE + clamp(assist, 0, 1) * T.HIT_RADIUS_ASSIST + (diving ? T.DIVE_RADIUS_BONUS : 0);
     let resolve = false;
     if (d <= radius) {
       // contact is the closest approach: keep the best frame and resolve once the shuttle starts moving away
@@ -185,12 +261,24 @@ export function stepPlayer(
     }
   }
 
+  // the dive is over: down, with get-up presses set by recovery
+  const fellDown = p0.action !== 'down' && (p.diveT ?? 0) > 0 && diveT === 0;
   let action: PlayerAction = charging ? 'charging' : running > T.MOVING_SPEED || mlen >= T.MOVE_DEADZONE ? 'moving' : 'idle';
-  if (!grounded) action = 'airborne';
+  if (pos.y > 0) action = 'airborne';
   if (swing) action = 'swinging';
+  if (diving) action = 'diving';
+  if (fellDown) {
+    action = 'down';
+    p.getUpPressesLeft = Math.max(T.GET_UP_MIN, Math.round(T.GET_UP_BASE - T.GET_UP_PER_RECOVERY * stats.recovery));
+    p.vel = { x: 0, y: 0, z: 0 };
+    swing = null;
+  }
   p.action = action;
   p.swing = swing;
   p.swingCooldown = cooldown;
+  p.diveT = diveT;
+  p.diveDir = diveDir;
+  p.diveSwung = diveSwung;
   return { player: p, hit };
 }
 

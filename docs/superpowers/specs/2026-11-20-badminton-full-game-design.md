@@ -1,6 +1,6 @@
 # Badminton web game — full game design
 
-Status: draft for the user's approval (decisions taken in chat on 2026-11-20).
+Status: approved by the user to proceed ("ต่อได้เลย", 2026-11-20); builder-check questions answered the same day.
 Builds on the playable demo (`2026-11-20-badminton-demo-design.md`), which stays the source of truth for
 shot controls, physics and the single-player feel unless this document changes them.
 
@@ -76,8 +76,11 @@ character plays. Everything below must keep that feel.
 - **B. Free CC0 (or equally permissive) rigged characters, animations, PBR textures and an HDRI.** Picked:
   the only free way past the low-poly look. Costs: bundle grows about 5–15 MB, and the downloaded
   animations must be blended with the existing footwork poses and racket-arm IK.
-  agy is researching candidates now (`.coord/research/assets-cc0.md`); the user picks the set and
-  approves each download.
+  Research: `.coord/research/assets-cc0.md`. The user approves each download.
+  **User's decision (builder check):** start with Quaternius (CC0 male + female on one rig, with the
+  Universal Animation Library), which is semi-stylized low-poly; upgrade to realistic MakeHuman/MPFB2
+  characters later as a separate task (that needs Blender, which is not installed). Racket and shuttlecock
+  stay procedural; floor textures from Poly Haven / ambientCG and an indoor HDRI (all CC0).
 - C. AI text-to-3D (e.g. Meshy): paid, inconsistent, needs manual rigging.
 
 ### Platform (user picked desktop only)
@@ -123,6 +126,10 @@ Desktop mouse+keyboard only now; mobile later would need a different control sch
 ### Online
 - First: private rooms by room code (simplest to test).
 - Then: automatic matchmaking and a ranking per event.
+- **Assists online (user's decision):** ranked play is manual control for everyone: no auto-racket, no
+  auto-move, no slow motion, one fixed hit-assist radius for all; information aids (landing marker,
+  racket aid) are allowed. Private rooms: the host chooses which assists are on. Slow motion (A-easy's
+  0.75x) is offline only, because a shared match runs at one speed. The server applies assists per player.
 
 ### App shell and settings
 Flow:
@@ -145,6 +152,11 @@ Settings (Claude's proposal the user accepted in outline):
 - Graphics: quality level (for weaker machines).
 - Account: display name; characters.
 Settings are saved locally before accounts exist and synced to the account afterwards.
+
+**Guest play (user's decision):** everything offline (bots, tutorial, career) works without an account
+and is saved locally from phase 2 on. Login is needed only for online play. On first login, local
+characters, settings and career progress are imported into the account (if the account already has
+data, the player chooses which to keep).
 
 ## What exists today (the demo, on `main`)
 

@@ -2,8 +2,10 @@
 
 ## In progress
 <!-- - [agent] task — files owned — started YYYY-MM-DD -->
-
-- [claude] PAUSED 2026-11-20 at orchestrate step: next = write .orchestra/plan.json + briefs (prompt-master), then dispatch wave 2: rules (opencode), physics (sonnet), render/input/loop (sonnet), screens/HUD (agy). Contract: src/types.ts. Design: docs/superpowers/specs/2026-11-20-badminton-demo-design.md
+- [opencode] t2 rules — src/rules/** — 2026-11-20
+- [sonnet] t3 physics — src/physics/** — 2026-11-20
+- [sonnet] t4 render + input — src/render/**, src/input/** — 2026-11-20
+- [agy] t5 ui screens + HUD — src/ui/** — 2026-11-20
 
 ## Done
 - [claude] Design doc + BWF scoring research (agy) — commit 12bfc87 — 2026-11-20

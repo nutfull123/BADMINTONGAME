@@ -6,7 +6,7 @@ import { chargeLevel, createPlayer, validateStats } from '../sim';
 import { applyAssist } from '../sim/assist';
 import { botIntent, createBot } from '../sim/bot';
 import { ASSIST_GAME_SPEED } from '../sim/tuning';
-import { createHud, PRESETS, showResult, type Settings } from '../ui';
+import { createHud, createViewControls, PRESETS, showResult, type Settings } from '../ui';
 import type { BodyType, Intent, MatchState, PlayerState, Stats, WorldView } from '../types';
 import { predictLanding } from '../physics';
 import { STEP, aimServe, startRally, stepRally, type Rally, type RallyReason } from './rally';
@@ -37,6 +37,7 @@ export function startMatch(root: HTMLElement, setup: MatchSetup, onAgain: () => 
   const renderer = createRenderer(container);
   const input = createInput(container.querySelector('canvas')!);
   const hud = createHud(root);
+  const viewControls = createViewControls(root, (z) => (renderer as { setZoom?: (z: number) => void }).setZoom?.(z)); // render adds setZoom in a parallel task
 
   let match: MatchState = createMatch(settings.format === '3x21' ? FORMAT_3X21 : FORMAT_3X15, 'near');
   let rally: Rally = startRally(
@@ -73,6 +74,7 @@ export function startMatch(root: HTMLElement, setup: MatchSetup, onAgain: () => 
     cancelAnimationFrame(raf);
     input.dispose();
     hud.dispose();
+    viewControls.dispose();
     renderer.dispose();
     container.remove();
     if (document.pointerLockElement) document.exitPointerLock();

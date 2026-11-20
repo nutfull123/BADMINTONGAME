@@ -215,6 +215,21 @@ function ensureStyles(): void {
       border-color: #7dd3fc;
     }
     /* HUD */
+    .bm-fs-btn {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 30;
+      width: 36px;
+      height: 36px;
+      border: 1px solid rgba(255,255,255,0.35);
+      border-radius: 8px;
+      background: rgba(15,23,42,0.6);
+      color: #f8fafc;
+      font-size: 20px;
+      cursor: pointer;
+    }
+    .bm-fs-btn:hover { background: rgba(15,23,42,0.85); }
     .bm-hud {
       position: fixed;
       inset: 0;
@@ -965,4 +980,51 @@ export function showResult(
   panel.append(title, sub, gamesList, btnRow);
   overlay.appendChild(panel);
   root.appendChild(overlay);
+}
+
+export const ZOOM_MIN = 0.6;
+export const ZOOM_MAX = 1.6;
+const ZOOM_STEP = 0.1; // per key press
+const WHEEL_STEP = 0.0015; // zoom per wheel delta unit
+
+export const clampZoom = (z: number): number => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
+
+// Fullscreen button (corner, key F) and zoom (wheel, + / -) for match and tutorial. Fullscreen drops the pointer lock;
+// the input module re-requests it on the next canvas click.
+export function createViewControls(root: HTMLElement, onZoom: (z: number) => void): { dispose(): void } {
+  ensureStyles();
+  let zoom = 1;
+  const setZoom = (z: number) => { zoom = clampZoom(Math.round(z * 1000) / 1000); onZoom(zoom); };
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) void document.exitFullscreen?.()?.catch(() => {});
+    else void root.requestFullscreen?.()?.catch(() => {});
+  };
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'bm-fs-btn';
+  btn.title = 'เต็มจอ';
+  btn.setAttribute('aria-label', 'เต็มจอ');
+  btn.textContent = '⛶';
+  btn.addEventListener('click', toggleFullscreen);
+  root.appendChild(btn);
+
+  const onKey = (e: KeyboardEvent) => {
+    if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.code === 'KeyF') toggleFullscreen();
+    else if (e.code === 'Equal' || e.code === 'NumpadAdd') setZoom(zoom + ZOOM_STEP);
+    else if (e.code === 'Minus' || e.code === 'NumpadSubtract') setZoom(zoom - ZOOM_STEP);
+  };
+  const onWheel = (e: WheelEvent) => { setZoom(zoom - e.deltaY * WHEEL_STEP); }; // wheel up (negative) zooms in
+  window.addEventListener('keydown', onKey);
+  window.addEventListener('wheel', onWheel, { passive: true });
+  onZoom(zoom);
+
+  return {
+    dispose() {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('wheel', onWheel);
+      btn.remove();
+    },
+  };
 }

@@ -148,3 +148,22 @@ export const ASSIST_LOOKAHEAD_STEP = 1 / 60; // s per look-ahead step (coarse on
 export const ASSIST_SLOW_RADIUS = 0.3; // m from the target inside which assisted movement eases off
 export const ASSIST_HOME_DEPTH = 3.2; // m behind the net where timing mode parks the player between shots
 export const ASSIST_INCOMING_SPEED = 0.5; // m/s of shuttle speed toward the player that counts as an incoming shot
+
+// ---------- footwork (sim/index.ts, read by render through sim/footwork.ts) ----------
+export const FOOTWORK_RECOVERY_SPAN = 0.4; // split hop and lunge delay scale by 1 + (5 - recovery) / 5 * this (stat 10 = x0.6)
+export const SPLIT_INCOMING_SPEED = 2; // m/s of shuttle speed toward the player that counts as the opponent hitting
+export const SPLIT_MAX_SPEED = 2; // m/s: a player already moving faster than this skips the split step
+export const SPLIT_HOP_TIME = 0.28; // s the split hop lasts at recovery 5
+export const SPLIT_WINDOW = 0.32; // s after the opponent's contact within which landing earns the boost
+export const SPLIT_BOOST_TIME = 0.3; // s the reaction boost lasts after landing
+export const SPLIT_BOOST_ACCEL = 1.5; // acceleration multiplier during the reaction boost
+export const FOOTWORK_MIN_SPEED = 1; // m/s below which a move is not a chasse or crossover
+export const CHASSE_MAX_SPEED = 4.5; // m/s above which sideways movement is a run, not a shuffle
+export const CHASSE_SIDEWAYS = 0.8; // share of speed along x that counts as mostly sideways
+export const CROSSOVER_MIN_SPEED = 2.5; // m/s backward (away from the net) that starts a crossover step
+export const CROSSOVER_SPEED_MUL = 1.08; // backward speed multiplier while crossing over
+export const CHASSE_STEP_LENGTH = 0.9; // m of travel per full chasse or crossover cycle (phase 0..1)
+export const LUNGE_REACH = 0.3; // m of extra forward racket reach at balanced height (scales with height)
+export const LUNGE_RECOVERY = 0.25; // s of no movement after a lunge at recovery 5
+export const LUNGE_MIN_SPEED = 1; // m/s toward the net needed to lunge
+export const RECOVER_TIME = 0.35; // s the "recover" label lasts after a swing

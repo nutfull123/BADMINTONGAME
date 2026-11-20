@@ -122,7 +122,7 @@ export function stepRally(r: Rally, intents: Record<Side, Intent[]>, dt: number,
   for (const side of SIDES) {
     r.players[side] = r.players[side].map((before, i) => {
       const slot = i as Slot;
-      const out = stepPlayer(before, intents[side][i], r.shuttle, dt, assist);
+      const out = stepPlayer(before, intents[side][i], r.shuttle, dt, assist, r.doubles);
       const isServer = side === r.server && slot === r.serverSlot;
       const isReceiver = side === receiverSide && slot === r.receiverSlot;
       if (out.hit && (r.stage !== 'serve' || isServer)) hits.push({ side, slot, launch: out.hit.launch });

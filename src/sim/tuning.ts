@@ -95,7 +95,7 @@ export const SPEED_MIN = 3; // m/s lowest launch speed the solver tries
 
 export const CLEAR_DEPTH_NEAR = 1.5; // m from the back line at zero charge
 export const CLEAR_DEPTH_FAR = 0.3; // m from the back line at full charge
-export const CLEAR_ELEVATION = (48 * Math.PI) / 180; // rad launch angle of a clear
+export const CLEAR_ELEVATIONS_DEG = [48, 56, 40, 64, 34]; // clear launch angles tried, preferred first
 
 export const DROP_DEPTH_MIN = 0.5; // m past the net at zero charge
 export const DROP_DEPTH_MAX = 3; // m past the net at full charge
@@ -112,7 +112,7 @@ export const SMASH_STEEP_FROM = 2; // m contact height where the smash starts to
 export const SMASH_STEEP_TO = 3.4; // m contact height of the steepest smash
 
 export const BASIC_DEPTH = 5; // m past the net of a flat drive
-export const BASIC_ELEVATIONS_DEG = [3, 7, 12, 18, 26]; // flat drive launch angles tried
+export const BASIC_ELEVATIONS_DEG = [3, 7, 12, 18, 26, 38, 50]; // flat drive launch angles tried, flattest first
 export const WEAK_DEPTH = 2.5; // m past the net of a wrong-side basic swing
 export const WEAK_ELEVATIONS_DEG = [35, 45, 55]; // weak shot launch angles tried (lobbed and slow)
 
@@ -123,7 +123,7 @@ export const TUMBLE_DEPTH = 0.5; // m past the net where a tumble lands
 export const TUMBLE_ELEVATIONS_DEG = [20, 30, 40, 50, 60, 70, 80]; // tumble launch angles tried
 export const PUSH_FLICK_UP = 3; // racketVel.y (units/s) that counts as strongly up (push deep)
 export const PUSH_DEPTH = 5; // m past the net of a net push
-export const PUSH_ELEVATIONS_DEG = [20, 28, 36, 45]; // push launch angles tried
+export const PUSH_ELEVATIONS_DEG = [20, 30, 40, 50, 60, 70]; // push launch angles tried, flattest first
 
 export const SERVE_SHORT_PAST_LINE_MIN = 0.15; // m past the short service line at zero charge
 export const SERVE_SHORT_PAST_LINE_MAX = 0.7; // m past the short service line at full charge
@@ -134,3 +134,5 @@ export const SERVE_LONG_ELEVATIONS_DEG = [55, 48, 62, 40]; // long serve launch 
 
 export const SOLVE_TOLERANCE = 0.25; // m landing error the solver accepts
 export const SOLVE_ITERATIONS = 20; // bisection steps per search
+export const ANGLE_SEARCH_MIN_DEG = -85; // steepest downward angle the smash/kill solver tries
+export const ANGLE_SEARCH_MAX_DEG = 60; // steepest upward angle the smash/kill solver tries (low contacts must still clear the net)

@@ -1,10 +1,12 @@
 // Player movement, stats, stamina, racket plane, swing, hits and dive. Pure: no three, no DOM.
 // facing f points along (sin f, 0, netDir * cos f) where netDir = -1 for near, +1 for far.
-import type { HitResult, Intent, PlayerAction, PlayerState, ShuttleState, Side, Stats, Vec3 } from '../types';
+import type { HitResult, Intent, PlayerAction, PlayerState, ShotType, ShuttleState, Side, Stats, Vec3 } from '../types';
 import { COURT } from '../physics';
+import { launchShuttle } from './shots';
 import * as T from './tuning';
 
 export { STAT_BUDGET } from './tuning';
+export { setRandom } from './shots';
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -27,7 +29,33 @@ export interface SimPlayer extends PlayerState {
   diveDir?: { x: number; z: number };
   diveSwung?: boolean;
 }
-interface Swing { t: number }
+interface Contact { d: number; pos: Vec3; flick: { x: number; y: number }; rx: number }
+interface Swing {
+  t: number;                           // seconds since release
+  shot: ShotType;
+  charge: number;                      // 0..1, fixed at release
+  basic: 'forehand' | 'backhand' | null;
+  lift: boolean;                       // the one-chance lift from a dive
+  best: Contact | null;                // closest approach inside the hit radius so far
+}
+
+// 0..1 charge reached after holding `chargeTime` seconds; low stamina and fatigue lower the ceiling.
+export function chargeLevel(p: Pick<PlayerState, 'staminaNow' | 'fatigue'>, chargeTime: number): number {
+  const cap = lerp(T.LOW_STAMINA_CHARGE_CAP, 1, clamp(p.staminaNow / T.STAMINA_FULL_CHARGE, 0, 1)) *
+    (1 - T.FATIGUE_CHARGE_LOSS * p.fatigue);
+  return Math.min(clamp(chargeTime / T.CHARGE_FULL_TIME, 0, 1), cap);
+}
+
+// Closest point of segment a-b to c, so a fast shuttle cannot tunnel through the hit radius between frames.
+function nearest(c: Vec3, a: Vec3, b: Vec3): { d: number; point: Vec3 } {
+  const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
+  const len2 = abx * abx + aby * aby + abz * abz;
+  const t = len2 > 0 ? clamp(((c.x - a.x) * abx + (c.y - a.y) * aby + (c.z - a.z) * abz) / len2, 0, 1) : 1;
+  const point = { x: a.x + abx * t, y: a.y + aby * t, z: a.z + abz * t };
+  return { d: Math.hypot(c.x - point.x, c.y - point.y, c.z - point.z), point };
+}
+
+const isServe = (s: ShotType | null) => s === 'serveShort' || s === 'serveLong';
 
 export function createPlayer(stats: Stats, side: Side, at: Vec3): PlayerState {
   const p: SimPlayer = {
@@ -118,16 +146,61 @@ export function stepPlayer(
   const turn = T.TURN_RATE * T.BODY_TURN[stats.body] * dt;
   const facing = p.facing + clamp(want - p.facing, -turn, turn);
 
-  let action: PlayerAction = charging ? 'charging' : running > T.MOVING_SPEED || mlen >= T.MOVE_DEADZONE ? 'moving' : 'idle';
-  if (!grounded) action = 'airborne';
-
   p.pos = pos;
   p.vel = vel;
   p.facing = facing;
   p.staminaNow = clamp(stamina, 0, 1);
   p.fatigue = clamp(fatigue, 0, 1);
+
+  // ----- swing: starts on release / net shot / basic swing, lasts SWING_WINDOW -----
+  let swing: Swing | null = p.swing ? { ...p.swing } : null;
+  let cooldown = Math.max(0, (p.swingCooldown ?? 0) - dt);
+  if (!swing && cooldown <= 0) {
+    const shot: ShotType | null = intent.release ?? (intent.netShot ? 'net' : intent.basicSwing ? 'basic' : null);
+    if (shot) {
+      const flat = shot === 'basic' || shot === 'net';
+      swing = { t: 0, shot, charge: flat ? 0 : chargeLevel(p, intent.chargeTime), basic: shot === 'basic' ? intent.basicSwing : null, lift: false, best: null };
+      cooldown = T.SWING_COOLDOWN;
+    }
+  }
+  const serving = isServe(swing?.shot ?? null) || isServe(intent.charging) || isServe(intent.release);
+  p.racketHead = racketHeadFor(p, intent.racket.x, intent.racket.y, serving, false);
+
+  let hit: HitResult | null = null;
+  if (swing) {
+    const prev = { x: shuttle.pos.x - shuttle.vel.x * dt, y: shuttle.pos.y - shuttle.vel.y * dt, z: shuttle.pos.z - shuttle.vel.z * dt };
+    const { d, point } = nearest(p.racketHead, prev, shuttle.pos);
+    const radius = T.HIT_RADIUS_BASE + clamp(assist, 0, 1) * T.HIT_RADIUS_ASSIST;
+    let resolve = false;
+    if (d <= radius) {
+      // contact is the closest approach: keep the best frame and resolve once the shuttle starts moving away
+      if (!swing.best || d < swing.best.d) swing.best = { d, pos: point, flick: { ...intent.racketVel }, rx: intent.racket.x };
+      else resolve = true;
+    } else if (swing.best) resolve = true;
+    swing.t += dt;
+    if (swing.t >= T.SWING_WINDOW) resolve = true;
+    if (resolve) {
+      if (swing.best) hit = makeHit(p, swing, swing.best);
+      swing = null;
+    }
+  }
+
+  let action: PlayerAction = charging ? 'charging' : running > T.MOVING_SPEED || mlen >= T.MOVE_DEADZONE ? 'moving' : 'idle';
+  if (!grounded) action = 'airborne';
+  if (swing) action = 'swinging';
   p.action = action;
-  p.racketHead = racketHeadFor(p, intent.racket.x, intent.racket.y, false, false);
-  void assist;
-  return { player: p, hit: null };
+  p.swing = swing;
+  p.swingCooldown = cooldown;
+  return { player: p, hit };
+}
+
+function makeHit(p: PlayerState, swing: Swing, c: Contact): HitResult {
+  const wrongSide = (swing.basic === 'forehand' && c.rx < -T.WRONG_SIDE_DEADZONE) ||
+    (swing.basic === 'backhand' && c.rx > T.WRONG_SIDE_DEADZONE);
+  const perfect = !wrongSide && !swing.lift && c.d < T.SWEET_RADIUS;
+  const shot: ShotType = swing.lift ? 'clear' : swing.shot;
+  const launch = launchShuttle({
+    shot, side: p.side, contact: c.pos, flick: c.flick, charge: swing.charge, perfect, weak: wrongSide, stats: p.stats,
+  });
+  return { shot, perfect, launch };
 }

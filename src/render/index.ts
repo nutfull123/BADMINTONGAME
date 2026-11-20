@@ -568,6 +568,35 @@ export function createRenderer(container: HTMLElement) {
 
   scene.add(shuttle, shadow, dropLine, trailLine, landingGroup, timing, chargeArc);
 
+  // Racket aid (view.aim): ring on the racket face (cyan FH / orange BH + letter), ring where the shuttle will
+  // cross the racket plane (white, green once close enough to hit), and a line between them. Drawn on top.
+  const onTop = <M extends THREE.Material>(m: M) => { m.depthTest = false; m.transparent = true; return m; };
+  const AIM_FH = 0x3fd0ff, AIM_BH = 0xff8a3d, AIM_ON = 0x39ff6a;
+  const aimRacket = new THREE.Mesh(new THREE.RingGeometry(0.1, 0.14, 32), onTop(basic(AIM_FH)));
+  const aimTarget = new THREE.Mesh(new THREE.RingGeometry(0.16, 0.21, 32), onTop(basic(0xffffff)));
+  const aimLinePositions = new Float32Array(6);
+  const aimLineGeo = new THREE.BufferGeometry();
+  aimLineGeo.setAttribute('position', new THREE.BufferAttribute(aimLinePositions, 3));
+  const aimLine = new THREE.Line(aimLineGeo, onTop(new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.6 })));
+  aimLine.frustumCulled = false; // positions change every frame; the bounding sphere is never recomputed
+  const labelTextures: THREE.Texture[] = [];
+  const sideLabel = (text: string, color: string) => {
+    const c = document.createElement('canvas');
+    c.width = 64; c.height = 32;
+    const g = c.getContext('2d')!;
+    g.font = 'bold 26px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillStyle = color; g.fillText(text, 32, 17);
+    const tex = new THREE.CanvasTexture(c);
+    labelTextures.push(tex);
+    const s = new THREE.Sprite(onTop(new THREE.SpriteMaterial({ map: tex })));
+    s.scale.set(0.36, 0.18, 1);
+    return s;
+  };
+  const fhLabel = sideLabel('FH', '#3fd0ff');
+  const bhLabel = sideLabel('BH', '#ff8a3d');
+  for (const o of [aimRacket, aimTarget, aimLine, fhLabel, bhLabel]) o.renderOrder = 10;
+  scene.add(aimRacket, aimTarget, aimLine, fhLabel, bhLabel);
+
   // Pre-allocate two human player rigs once and reuse every frame
   const humanAssets = createSharedHumanAssets();
   const rigs: HumanRig[] = [
@@ -687,6 +716,30 @@ export function createRenderer(container: HTMLElement) {
       }
     }
 
+    // Racket aid
+    const aim = view.aim ?? null;
+    const fh = aim?.side === 'forehand';
+    aimRacket.visible = fhLabel.visible = bhLabel.visible = aimTarget.visible = aimLine.visible = false;
+    if (aim) {
+      const r = aim.racket;
+      aimRacket.visible = true;
+      aimRacket.position.set(r.x, r.y, r.z);
+      aimRacket.quaternion.copy(camera.quaternion);
+      (aimRacket.material as THREE.MeshBasicMaterial).color.setHex(fh ? AIM_FH : AIM_BH);
+      const label = fh ? fhLabel : bhLabel;
+      label.visible = true;
+      label.position.set(r.x, r.y + 0.28, r.z);
+      const t = aim.target;
+      if (t) {
+        aimTarget.visible = aimLine.visible = true;
+        aimTarget.position.set(t.x, t.y, t.z);
+        aimTarget.quaternion.copy(camera.quaternion);
+        (aimTarget.material as THREE.MeshBasicMaterial).color.setHex(aim.onTarget ? AIM_ON : 0xffffff);
+        aimLinePositions.set([r.x, r.y, r.z, t.x, t.y, t.z]);
+        (aimLineGeo.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+      }
+    }
+
     renderer.render(scene, camera);
   }
 
@@ -703,6 +756,7 @@ export function createRenderer(container: HTMLElement) {
     });
     geometries.forEach((g) => g.dispose());
     materials.forEach((m) => m.dispose());
+    labelTextures.forEach((t) => t.dispose());
     renderer.dispose();
     renderer.domElement.remove();
   }

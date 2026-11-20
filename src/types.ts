@@ -119,4 +119,14 @@ export interface WorldView {
   landing: Vec3 | null;       // null when the marker is off
   timingRing: number | null;  // 0..1 closeness to perfect, null when off
   charge: number | null;      // 0..1 charge of the human player
+  aim?: AimView | null;       // human racket aid; omitted or null hides it
+}
+
+// Racket aid for the human: where the racket face is, where the incoming shuttle will cross the racket plane,
+// which side the racket is on, and whether it is close enough to hit.
+export interface AimView {
+  racket: Vec3;
+  target: Vec3 | null;
+  side: 'forehand' | 'backhand';
+  onTarget: boolean;
 }

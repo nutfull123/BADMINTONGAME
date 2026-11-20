@@ -3,7 +3,7 @@ import { createInput } from '../input';
 import { createRenderer } from '../render';
 import { FORMAT_3X15, FORMAT_3X21, awardRally, createMatch } from '../rules';
 import { chargeLevel, createPlayer, validateStats } from '../sim';
-import { applyAssist } from '../sim/assist';
+import { aimView, applyAssist } from '../sim/assist';
 import { botIntent, createBot } from '../sim/bot';
 import { ASSIST_GAME_SPEED } from '../sim/tuning';
 import { createHud, createViewControls, PRESETS, showResult, type Settings } from '../ui';
@@ -112,6 +112,7 @@ export function startMatch(root: HTMLElement, setup: MatchSetup, onAgain: () => 
       landing: settings.landingMarker && rally.stage !== 'serve' ? predictLanding(rally.shuttle) : null,
       timingRing: settings.timingRing && charging ? Math.max(0, Math.min(1, 1 - gap / 1.5)) : null,
       charge: charging && human ? chargeLevel(me, human.chargeTime) : null,
+      aim: aimView(me, rally.shuttle, assist),
     };
   }
 

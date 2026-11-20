@@ -5,7 +5,7 @@ import { createRenderer } from '../render';
 import { predictLanding, stepShuttle } from '../physics';
 import { FORMAT_3X15, createMatch } from '../rules';
 import { chargeLevel, createPlayer, recoverBetweenPoints, stepPlayer, validateStats } from '../sim';
-import { applyAssist } from '../sim/assist';
+import { aimView, applyAssist } from '../sim/assist';
 import { ASSIST_GAME_SPEED, SERVE_MAX_CONTACT } from '../sim/tuning';
 import { createHud, createViewControls, PRESETS, type Settings } from '../ui';
 import type { Intent, MatchState, PlayerState, ServiceCourt, ShuttleState, Stats, Vec3, WorldView } from '../types';
@@ -268,6 +268,7 @@ export function startTutorial(root: HTMLElement, setup: TutorialSetup, onAgain: 
       landing: showTarget ? target : settings.landingMarker && stage === 'flight' ? predictLanding(shuttle) : null,
       timingRing: settings.timingRing && charging ? Math.max(0, Math.min(1, 1 - gap / 1.5)) : null,
       charge: charging && human ? chargeLevel(near, human.chargeTime) : null,
+      aim: aimView(near, shuttle, assist),
     };
   }
 

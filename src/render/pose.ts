@@ -1,13 +1,36 @@
 // Pure pose, footwork animation, two-bone IK, camera framing/zoom, landing-marker pulse and shuttle trail buffer math (no DOM, no WebGL/Three).
 import type { FootworkView } from '../sim/footwork';
 import { footworkOf } from '../sim/footwork';
-import type { BodyType, PlayerState, Vec3 } from '../types';
+import type { BodyType, Gender, PlayerState, Side, Slot, Vec3 } from '../types';
 
 export const BODY_HEIGHT: Record<BodyType, number> = {
   tall: 1.95,
   balanced: 1.78,
   short: 1.63,
 };
+
+export const MAX_RIGS = 4;
+/** Which of the pre-allocated rigs are shown for `playerCount` players. */
+export const rigVisibility = (playerCount: number): boolean[] =>
+  Array.from({ length: MAX_RIGS }, (_, i) => i < playerCount);
+
+/** The player the camera, rings and aid follow: view.human, else the first near player. */
+export function followedPlayer(players: PlayerState[], human?: number): PlayerState | undefined {
+  return (human !== undefined ? players[human] : undefined) ?? players.find((p) => p.side === 'near') ?? players[0];
+}
+
+/** Body proportions as fractions of height; women are drawn slimmer, with a ponytail. */
+export function proportionsOf(g: Gender) {
+  return g === 'female'
+    ? { shoulder: 0.125, torso: 0.9, limb: 0.85, ponytail: true }
+    : { shoulder: 0.145, torso: 1, limb: 1, ponytail: false };
+}
+
+const TEAM_COLOR: Record<Side, [number, number]> = {
+  near: [0x2563eb, 0x60a5fa],
+  far: [0xdc2626, 0xf87171],
+};
+export const teamColor = (side: Side, slot: Slot): number => TEAM_COLOR[side][slot];
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;

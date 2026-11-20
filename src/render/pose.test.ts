@@ -10,6 +10,11 @@ import {
   projectPointToNdc,
   stepZoom,
   clampZoom,
+  MAX_RIGS,
+  rigVisibility,
+  followedPlayer,
+  proportionsOf,
+  teamColor,
 } from './pose';
 import type { FootworkView } from '../sim/footwork';
 import type { PlayerState } from '../types';
@@ -250,5 +255,42 @@ describe('pose, footwork, camera framing & trail math (pure, no WebGL/DOM)', () 
     const sPeak = computePulseScale(Math.PI / (2 * 6));
     expect(s0).toBeCloseTo(1.0, 2);
     expect(sPeak).toBeGreaterThan(1.08);
+  });
+});
+
+describe('doubles render maths', () => {
+  it('shows 2 rigs for singles and 4 for doubles out of 4 pre-allocated', () => {
+    expect(MAX_RIGS).toBe(4);
+    expect(rigVisibility(2)).toEqual([true, true, false, false]);
+    expect(rigVisibility(4)).toEqual([true, true, true, true]);
+  });
+
+  it('follows the human index, falling back to the first near player', () => {
+    const ps = [
+      makePlayer({ side: 'far' }),
+      makePlayer({ side: 'near', slot: 0 }),
+      makePlayer({ side: 'near', slot: 1 }),
+    ];
+    expect(followedPlayer(ps, 2)).toBe(ps[2]);
+    expect(followedPlayer(ps, undefined)).toBe(ps[1]);
+    expect(followedPlayer(ps, 9)).toBe(ps[1]);
+    expect(followedPlayer([], 0)).toBeUndefined();
+  });
+
+  it('draws women slimmer than men with a ponytail', () => {
+    const m = proportionsOf('male');
+    const f = proportionsOf('female');
+    expect(f.shoulder).toBeLessThan(m.shoulder);
+    expect(f.limb).toBeLessThan(m.limb);
+    expect(f.ponytail).toBe(true);
+    expect(m.ponytail).toBe(false);
+  });
+
+  it('colours near blue, far red, second partner lighter', () => {
+    const lum = (c: number) => (c >> 16) + ((c >> 8) & 255) + (c & 255);
+    expect(teamColor('near', 0) & 255).toBeGreaterThan(teamColor('near', 0) >> 16);
+    expect(teamColor('far', 0) >> 16).toBeGreaterThan(teamColor('far', 0) & 255);
+    expect(lum(teamColor('near', 1))).toBeGreaterThan(lum(teamColor('near', 0)));
+    expect(lum(teamColor('far', 1))).toBeGreaterThan(lum(teamColor('far', 0)));
   });
 });

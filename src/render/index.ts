@@ -568,8 +568,8 @@ export function createRenderer(container: HTMLElement) {
 
   scene.add(shuttle, shadow, dropLine, trailLine, landingGroup, timing, chargeArc);
 
-  // Racket aid (view.aim): ring on the racket face (cyan FH / orange BH + letter), ring where the shuttle will
-  // cross the racket plane (white, green once close enough to hit), and a line between them. Drawn on top.
+  // Racket aid (view.aim): ring on the racket face (cyan FH / orange BH + letter), ring on the live incoming
+  // shuttle (white, green once close enough to hit), and a line between them. Drawn on top.
   const onTop = <M extends THREE.Material>(m: M) => { m.depthTest = false; m.transparent = true; return m; };
   const AIM_FH = 0x3fd0ff, AIM_BH = 0xff8a3d, AIM_ON = 0x39ff6a;
   const aimRacket = new THREE.Mesh(new THREE.RingGeometry(0.1, 0.14, 32), onTop(basic(AIM_FH)));

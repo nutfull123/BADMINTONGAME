@@ -9,7 +9,7 @@ import { aimView, applyAssist } from '../sim/assist';
 import { ASSIST_GAME_SPEED, SERVE_MAX_CONTACT } from '../sim/tuning';
 import { createHud, createViewControls, PRESETS, type Settings } from '../ui';
 import type { Intent, MatchState, PlayerState, ServiceCourt, ShuttleState, Stats, Vec3, WorldView } from '../types';
-import { aimServe, serveSpots, STEP } from './rally';
+import { aimServe, serveSpots, serveStance, STEP } from './rally';
 import { createTutorial, type Attempt, type Progress } from '../tutorial';
 
 export interface TutorialSetup { stats: Stats; settings: Settings }
@@ -196,7 +196,7 @@ export function startTutorial(root: HTMLElement, setup: TutorialSetup, onAgain: 
 
     if (stage === 'serve') {
       const out = stepPlayer(near, aimServe(i, near), shuttle, STEP, assist);
-      near = out.player;
+      near = serveStance(out.player, near, serveCourt, i);
       if (out.hit) {
         const landing = predictLanding(out.hit.launch);
         shuttle = out.hit.launch;

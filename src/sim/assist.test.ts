@@ -23,18 +23,18 @@ describe('aimView', () => {
     }
   });
 
-  it('gives a target only for an incoming shuttle, and onTarget once the racket is on it', () => {
+  it('marks the live shuttle while it heads toward the player, and onTarget when the racket can reach it now', () => {
     const p = createPlayer(stats, 'near', { x: 0, y: 0, z: 3.5 });
-    const away = aimView(p, { ...incoming, vel: { ...incoming.vel, z: -14 } }, 0.7);
+    const away = aimView(p, { ...incoming, vel: { ...incoming.vel, z: -14 } }, 0.7); // the player's own shot leaving
     expect(away.target).toBeNull();
     expect(away.onTarget).toBe(false);
-    const target = aimView(p, incoming, 0.7).target!;
-    expect(target).not.toBeNull();
-    const r = racketInputFor(p, target);
-    const on = { ...p, racketHead: racketHeadFor(p, r.x, r.y, false, false) };
-    expect(aimView(on, incoming, 0.7).onTarget).toBe(true);
-    const off = { ...p, racketHead: racketHeadFor(p, -r.x || 1, -r.y || -1, false, false) };
-    expect(aimView(off, incoming, 0).onTarget).toBe(false);
+    expect(aimView(p, { pos: incoming.pos, vel: { x: 0, y: 0, z: 0 } }, 0.7).target).toBeNull(); // held for a serve
+    expect(aimView(p, incoming, 0.7).target).toEqual(incoming.pos); // where the shuttle is right now
+    expect(aimView(p, incoming, 0.7).onTarget).toBe(false); // still across the net
+    const atRacket: ShuttleState = { pos: { ...p.racketHead, y: p.racketHead.y + 0.2 }, vel: { x: 0, y: -2, z: 3 } };
+    expect(aimView(p, atRacket, 0).onTarget).toBe(true);
+    const offRacket: ShuttleState = { ...atRacket, pos: { ...atRacket.pos, x: atRacket.pos.x + 1.5 } };
+    expect(aimView(p, offRacket, 0).onTarget).toBe(false);
   });
 });
 

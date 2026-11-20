@@ -45,16 +45,17 @@ function intercept(p: PlayerState, shuttle: ShuttleState): Vec3 | null {
   return s.pos;
 }
 
-// On-screen racket aid: racket.x > 0 (own right for near, own right for far) is the forehand side.
+// On-screen racket aid: racket.x > 0 (own right for near, own right for far) is the forehand side. The target is
+// the live shuttle while it travels toward this player (not a prediction), so it can be met anywhere in the air.
 export function aimView(p: PlayerState, shuttle: ShuttleState, assist: number): AimView {
-  const target = intercept(p, shuttle);
+  const target = sgnOf(p.side) * shuttle.vel.z > 0 ? shuttle.pos : null;
   const h = p.racketHead;
-  const reach = T.HIT_RADIUS_BASE + clamp(assist, 0, 1) * T.HIT_RADIUS_ASSIST;
+  const reach = T.HIT_RADIUS_BASE + clamp(assist, 0, 1) * T.HIT_RADIUS_ASSIST; // same radius as the sim's hit test
   return {
     racket: h,
     target,
     side: sgnOf(p.side) * (h.x - p.pos.x) >= 0 ? 'forehand' : 'backhand',
-    onTarget: !!target && Math.hypot(target.x - h.x, target.y - h.y, target.z - h.z) < reach,
+    onTarget: !!target && Math.hypot(target.x - h.x, target.y - h.y, target.z - h.z) <= reach,
   };
 }
 

@@ -1,11 +1,12 @@
 // One rally: serve placement, hit handling and the in/out/net/fault calls. Pure: no three, no DOM.
-import { isInServiceBox, isInSingles, stepShuttle } from '../physics';
+import { isInServiceBox, isInSingles, serviceBox, stepShuttle } from '../physics';
 import { recoverBetweenPoints, stepPlayer } from '../sim';
 import { SERVE_MAX_CONTACT } from '../sim/tuning';
 import type { Intent, MatchState, PlayerState, ServiceCourt, ShuttleState, Side, Vec3 } from '../types';
 
 export const STEP = 1 / 120; // fixed simulation step
 const SERVE_AIM_FLICK = 2.4; // racketVel.x bias (~20 degrees): lands both short and long serves in the diagonal box
+const SERVE_FEET_MARGIN = 0.12; // m: feet stay inside the service court without touching its lines (BWF Law 9.1.2)
 
 const other = (s: Side): Side => (s === 'near' ? 'far' : 'near');
 const sgnOf = (s: Side) => (s === 'near' ? 1 : -1);
@@ -65,13 +66,38 @@ export function judgeFloor(at: Vec3, hitter: Side, serveFlight: boolean, court: 
   return { winner: receiver, reason: serveFlight ? 'serve-fault' : 'out' };
 }
 
+// Move the feet to (x, z), carrying the racket head along so it stays where the player holds it.
+function placeFeet(p: PlayerState, x: number, z: number): PlayerState {
+  if (x === p.pos.x && z === p.pos.z) return p;
+  const dx = x - p.pos.x, dz = z - p.pos.z;
+  return {
+    ...p, // keeps the sim's hidden swing/dive/footwork state
+    pos: { ...p.pos, x, z },
+    vel: { ...p.vel, x: 0, z: 0 },
+    racketHead: { ...p.racketHead, x: p.racketHead.x + dx, z: p.racketHead.z + dz },
+  };
+}
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+const isServe = (s: Intent['charging']) => s === 'serveShort' || s === 'serveLong';
+
+// BWF Law 9.1: server and receiver stand inside diagonally opposite service courts (court names match from each
+// player's own view), and their feet stay still from the start of the serve until the shuttle is struck.
+export function serveStance(p: PlayerState, before: PlayerState, court: ServiceCourt, serverIntent: Intent): PlayerState {
+  if (isServe(serverIntent.charging) || isServe(serverIntent.release)) return placeFeet(p, before.pos.x, before.pos.z);
+  const b = serviceBox(p.side, court);
+  const m = SERVE_FEET_MARGIN;
+  return placeFeet(p, clamp(p.pos.x, b.xMin + m, b.xMax - m), clamp(p.pos.z, b.zMin + m, b.zMax - m));
+}
+
 export function stepRally(r: Rally, intents: Record<Side, Intent>, dt: number, assist: number): void {
   if (r.result) return;
   let hitBy: Side | null = null;
   let launch: ShuttleState | null = null;
   for (const side of ['near', 'far'] as const) {
-    const out = stepPlayer(r[side], intents[side], r.shuttle, dt, assist);
-    r[side] = out.player;
+    const before = r[side];
+    const out = stepPlayer(before, intents[side], r.shuttle, dt, assist);
+    r[side] = r.stage === 'serve' ? serveStance(out.player, before, r.court, intents[r.server]) : out.player;
     if (out.hit && !hitBy && (r.stage !== 'serve' || side === r.server)) { hitBy = side; launch = out.hit.launch; }
   }
 

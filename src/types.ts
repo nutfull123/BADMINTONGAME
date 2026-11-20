@@ -7,6 +7,10 @@ export interface Vec3 { x: number; y: number; z: number }
 
 export type Side = 'near' | 'far';
 export type ServiceCourt = 'right' | 'left';
+export type Slot = 0 | 1;  // partner index within a side; singles uses 0 only
+
+// MS men's singles, WS women's singles, MD men's doubles, WD women's doubles, XD mixed doubles.
+export type MatchEvent = 'MS' | 'WS' | 'MD' | 'WD' | 'XD';
 
 // ---------- rules/ (pure, no imports outside rules/ except this file) ----------
 
@@ -30,12 +34,19 @@ export interface MatchState {
   endsSwapped: boolean;        // true when players stand on the opposite ends from game 1
   intervalNow: boolean;        // true right after the rally that triggered an interval
   winner: Side | null;
+  doubles: boolean;
+  // Doubles (BWF Law 11): which partner of each side stands in that side's right service court.
+  // The server is the serving side's player in `serviceCourt`; the receiver is the receiving side's player
+  // in the same-named court. Serving side wins a rally: its partners swap courts. Receiving side wins: no swap.
+  // Singles: always { near: 0, far: 0 } and slot 0 serves and receives.
+  rightCourt: Record<Side, Slot>;
 }
 
 // rules/index.ts must export:
 //   FORMAT_3X15: MatchConfig; FORMAT_3X21: MatchConfig
-//   createMatch(config: MatchConfig, firstServer: Side): MatchState
+//   createMatch(config: MatchConfig, firstServer: Side, doubles = false): MatchState
 //   awardRally(state: MatchState, rallyWinner: Side): MatchState   // pure, returns a new object
+//   serverSlot(state: MatchState): Slot; receiverSlot(state: MatchState): Slot
 
 // ---------- physics/ (pure) ----------
 
@@ -47,19 +58,22 @@ export type ShuttleEvent =
   | { kind: 'floor'; at: Vec3 };          // touched the floor at `at`
 
 // physics/index.ts must export:
-//   COURT: { halfLength: 6.70; halfWidthSingles: 2.59; shortServiceLine: 1.98;
-//            netHeightCentre: 1.524; netHeightPost: 1.55 }
+//   COURT: { halfLength: 6.70; halfWidthSingles: 2.59; halfWidthDoubles: 3.05; shortServiceLine: 1.98;
+//            longServiceLineDoubles: 5.94; netHeightCentre: 1.524; netHeightPost: 1.55 }
 //   stepShuttle(s: ShuttleState, dt: number): { state: ShuttleState; event: ShuttleEvent }
 //   predictLanding(s: ShuttleState): Vec3 | null     // where it will touch the floor, null if it hits the net
 //   isInSingles(at: Vec3, side: Side): boolean       // inside that side's singles court (lines are in)
-//   isInServiceBox(at: Vec3, receiverSide: Side, court: ServiceCourt): boolean
+//   isInCourt(at: Vec3, side: Side, doubles: boolean): boolean
+//   serviceBox(side, court, doubles = false); isInServiceBox(at, receiverSide, court, doubles = false)
 
 // ---------- sim/ ----------
 
 export type BodyType = 'tall' | 'balanced' | 'short';
+export type Gender = 'male' | 'female';
 
 export interface Stats {
-  body: BodyType;      // fixes height: tall 1.95 m, balanced 1.78 m, short 1.63 m
+  gender: Gender;      // look and height range only; the stat budget is the same
+  body: BodyType;      // with gender fixes height (sim/tuning HEIGHT): male 1.95/1.78/1.63, female 1.82/1.68/1.58 m
   speed: number;       // 0..10
   power: number;       // 0..10
   recovery: number;    // 0..10
@@ -87,6 +101,7 @@ export type PlayerAction = 'idle' | 'moving' | 'charging' | 'swinging' | 'airbor
 
 export interface PlayerState {
   side: Side;
+  slot: Slot;                // partner index on its side (0 in singles)
   stats: Stats;
   pos: Vec3;                 // feet
   vel: Vec3;
@@ -106,15 +121,17 @@ export interface HitResult {
 
 // sim/index.ts must export:
 //   STAT_BUDGET = 20
-//   createPlayer(stats: Stats, side: Side, at: Vec3): PlayerState
+//   createPlayer(stats: Stats, side: Side, at: Vec3, slot: Slot = 0): PlayerState
 //   stepPlayer(p: PlayerState, intent: Intent, shuttle: ShuttleState, dt: number, assist: number):
 //     { player: PlayerState; hit: HitResult | null }
-//   bot: createBot(level: 'easy'|'medium'|'hard'), botIntent(bot, me: PlayerState, opp: PlayerState, shuttle, dt): Intent
+//   bot (sim/bot.ts): createBot(level, rng?), botIntent(bot, me: PlayerState, ctx: BotContext, shuttle, dt): Intent
+//     BotContext { partner: PlayerState | null; opponents: PlayerState[]; serving: boolean; receiving: boolean }
 
 // ---------- render/ and ui/ ----------
 
 export interface WorldView {
-  players: PlayerState[];
+  players: PlayerState[];     // 2 in singles, 4 in doubles
+  human?: number;             // index in players of the human (camera, rings, aid); default: first near player
   shuttle: ShuttleState;
   landing: Vec3 | null;       // null when the marker is off
   timingRing: number | null;  // 0..1 closeness to perfect, null when off

@@ -43,7 +43,7 @@ export interface Drill {
 
 // ---------- feeder ----------
 
-const FEED_STATS: Stats = { body: 'balanced', speed: 5, power: 5, recovery: 5, stamina: 5 };
+const FEED_STATS: Stats = { gender: 'male', body: 'balanced', speed: 5, power: 5, recovery: 5, stamina: 5 };
 
 interface FeedOptions {
   shot: ShotType;

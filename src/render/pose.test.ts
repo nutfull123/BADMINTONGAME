@@ -17,7 +17,8 @@ import type { PlayerState } from '../types';
 function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
   return {
     side: 'near',
-    stats: { body: 'balanced', speed: 5, power: 5, recovery: 5, stamina: 5 },
+    slot: 0,
+    stats: { gender: 'male', body: 'balanced', speed: 5, power: 5, recovery: 5, stamina: 5 },
     pos: { x: 0, y: 0, z: 3.5 },
     vel: { x: 0, y: 0, z: 0 },
     facing: 0,

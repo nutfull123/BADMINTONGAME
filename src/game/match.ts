@@ -4,7 +4,7 @@ import { createRenderer } from '../render';
 import { FORMAT_3X15, FORMAT_3X21, awardRally, createMatch } from '../rules';
 import { chargeLevel, createPlayer, validateStats } from '../sim';
 import { aimView, applyAssist } from '../sim/assist';
-import { botIntent, createBot } from '../sim/bot';
+import { botIntent, createBot, solo } from '../sim/bot';
 import { ASSIST_GAME_SPEED } from '../sim/tuning';
 import { createHud, createViewControls, PRESETS, showResult, type Settings } from '../ui';
 import type { BodyType, Intent, MatchState, PlayerState, Stats, WorldView } from '../types';
@@ -95,7 +95,7 @@ export function startMatch(root: HTMLElement, setup: MatchSetup, onAgain: () => 
     stepRally(rally, {
       near: rally.stage === 'serve' && rally.server === 'near'
         ? aimServe(i, rally.near) : applyAssist(i, rally.near, rally.shuttle, settings.mode),
-      far: botIntent(bot, rally.far, rally.near, rally.shuttle, STEP, serving),
+      far: botIntent(bot, rally.far, solo(rally.near, serving), rally.shuttle, STEP),
     }, STEP, assist);
     if (rally.result) endRally(rally.result.winner, rally.result.reason);
   }

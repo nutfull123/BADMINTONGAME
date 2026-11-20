@@ -4,7 +4,7 @@ import type { BodyType, HitResult, Intent, PlayerState, ShuttleState, Stats, Vec
 import { createPlayer, setRandom, stepPlayer } from './index';
 
 const stats = (body: BodyType = 'balanced', o: Partial<Stats> = {}): Stats => ({
-  body, speed: 5, power: 5, recovery: 5, stamina: 5, ...o,
+  gender: 'male', body, speed: 5, power: 5, recovery: 5, stamina: 5, ...o,
 });
 const idle: Intent = {
   move: { x: 0, z: 0 }, racket: { x: 0, y: 0 }, racketVel: { x: 0, y: 0 },

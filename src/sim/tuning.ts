@@ -1,12 +1,17 @@
 // Every sim/ tuning number lives here. Units: metres, seconds, m/s, radians unless noted.
 // Tweak the feel in this one file.
-import type { BodyType } from '../types';
+import type { BodyType, Gender, Stats } from '../types';
 
 export const STAT_BUDGET = 20; // speed + power + recovery + stamina must not exceed this
 export const STAT_MAX = 10; // each stat is 0..10
 
 // ---------- body ----------
-export const HEIGHT: Record<BodyType, number> = { tall: 1.95, balanced: 1.78, short: 1.63 }; // metres
+export const HEIGHT: Record<Gender, Record<BodyType, number>> = { // metres
+  male: { tall: 1.95, balanced: 1.78, short: 1.63 },
+  female: { tall: 1.82, balanced: 1.68, short: 1.58 },
+};
+export const HEIGHT_REF = 1.78; // m, the height the reach numbers below are tuned for
+export const heightOf = (s: Pick<Stats, 'gender' | 'body'>) => HEIGHT[s.gender][s.body];
 export const BODY_SPEED: Record<BodyType, number> = { tall: 0.92, balanced: 1, short: 1.08 }; // top-speed multiplier
 export const BODY_ACCEL: Record<BodyType, number> = { tall: 0.7, balanced: 1, short: 1.25 }; // acceleration multiplier
 export const BODY_TURN: Record<BodyType, number> = { tall: 0.55, balanced: 1, short: 1.3 }; // how fast velocity direction can change

@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { FORMAT_3X15, awardRally, createMatch } from '../rules';
 import { createPlayer, setRandom } from '../sim';
-import { botIntent, createBot } from '../sim/bot';
+import { botIntent, createBot, solo } from '../sim/bot';
 import type { Intent, PlayerState, Stats } from '../types';
 import { serviceBox } from '../physics';
 import { STEP, aimServe, judgeFloor, runRally, serveSpots, startRally, stepRally } from './rally';
 
-const stats: Stats = { body: 'balanced', speed: 5, power: 5, recovery: 5, stamina: 5 };
+const stats: Stats = { gender: 'male', body: 'balanced', speed: 5, power: 5, recovery: 5, stamina: 5 };
 const idle = (): Intent => ({
   move: { x: 0, z: 0 }, racket: { x: 0, y: 0 }, racketVel: { x: 0, y: 0 }, charging: null, chargeTime: 0,
   release: null, basicSwing: null, jumpCharge: 0, jumpRelease: false, dive: false, netShot: false,
@@ -87,7 +87,7 @@ describe('runRally', () => {
       match, near, far,
       intent: (side, r, t) => (side === 'near'
         ? scriptedServe(t, r.near)
-        : botIntent(bot, r.far, r.near, r.shuttle, STEP, r.stage === 'serve' && r.server === 'far')),
+        : botIntent(bot, r.far, solo(r.near, r.stage === 'serve' && r.server === 'far'), r.shuttle, STEP)),
     });
     expect(out.result).not.toBeNull();
     match = awardRally(match, out.result!.winner);

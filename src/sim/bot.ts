@@ -96,8 +96,8 @@ function emptyIntent(): Intent {
 
 function computeRacketAim(me: PlayerState, target: Vec3, serving: boolean): { x: number; y: number } {
   const sgn = sgnOf(me.side);
-  const h = T.HEIGHT[me.stats.body];
-  const lateral = T.REACH_LATERAL_BASE + T.REACH_LATERAL_PER_M * (h - T.HEIGHT.balanced);
+  const h = T.heightOf(me.stats);
+  const lateral = T.REACH_LATERAL_BASE + T.REACH_LATERAL_PER_M * (h - T.HEIGHT_REF);
   const top = h * T.RACKET_TOP_FACTOR + T.RACKET_TOP_OFFSET;
   const rx = clamp(((target.x - me.pos.x) * sgn) / lateral, -1, 1);
   const desiredY = serving ? Math.min(target.y, T.SERVE_MAX_CONTACT) : target.y;
@@ -158,14 +158,23 @@ function computeServeFlickX(
     : sgn * targetWorldXDir * BOT_TUNING.serveFlickSpeed;
 }
 
-export function botIntent(
-  bot: Bot,
-  me: PlayerState,
-  opp: PlayerState,
-  shuttle: ShuttleState,
-  dt: number,
-  serving: boolean,
-): Intent {
+// What the bot knows about the others on court. Singles: partner null, one opponent.
+// receiving: this bot is the designated receiver of the current serve (only it may return the serve).
+export interface BotContext {
+  partner: PlayerState | null;
+  opponents: PlayerState[];
+  serving: boolean;
+  receiving: boolean;
+}
+
+// Singles: no partner, one opponent; the bot receives every serve it does not make.
+export const solo = (opponent: PlayerState, serving: boolean): BotContext =>
+  ({ partner: null, opponents: [opponent], serving, receiving: !serving });
+
+export function botIntent(bot: Bot, me: PlayerState, ctx: BotContext, shuttle: ShuttleState, dt: number): Intent {
+  // shortcut: singles behaviour only (aims away from the first opponent, ignores the partner); doubles is task D3
+  const opp = ctx.opponents[0];
+  const serving = ctx.serving;
   const intent = emptyIntent();
   const sgn = sgnOf(me.side);
   const cfg = BOT_TUNING[bot.level];
@@ -290,8 +299,8 @@ export function botIntent(
     bot.plannedShot = shot;
 
     // Predict racket head world position for this frame's aim
-    const h = T.HEIGHT[me.stats.body];
-    const lateral = T.REACH_LATERAL_BASE + T.REACH_LATERAL_PER_M * (h - T.HEIGHT.balanced);
+    const h = T.heightOf(me.stats);
+    const lateral = T.REACH_LATERAL_BASE + T.REACH_LATERAL_PER_M * (h - T.HEIGHT_REF);
     const top = h * T.RACKET_TOP_FACTOR + T.RACKET_TOP_OFFSET;
     const expectedHead: Vec3 = {
       x: me.pos.x + sgn * intent.racket.x * lateral,

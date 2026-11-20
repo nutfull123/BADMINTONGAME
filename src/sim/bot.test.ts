@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { createBot, botIntent, BOT_TUNING } from './bot';
+import { createBot, botIntent, BOT_TUNING, solo } from './bot';
 import { createPlayer, stepPlayer, setRandom } from './index';
 import { predictLanding, stepShuttle, isInServiceBox } from '../physics';
 import type { ServiceCourt, ShotType, ShuttleState, Stats } from '../types';
 
-const balancedStats: Stats = { body: 'balanced', speed: 5, power: 5, recovery: 5, stamina: 5 };
+const balancedStats: Stats = { gender: 'male', body: 'balanced', speed: 5, power: 5, recovery: 5, stamina: 5 };
 
 function makeLcg(seed: number): () => number {
   let s = seed >>> 0;
@@ -27,7 +27,7 @@ describe('bot AI', () => {
     expect(landing).not.toBeNull();
     expect(landing!.z).toBeLessThan(0);
 
-    const intent = botIntent(bot, me, opp, shuttle, BOT_TUNING.hard.reactionDelay + 0.05, false);
+    const intent = botIntent(bot, me, solo(opp, false), shuttle, BOT_TUNING.hard.reactionDelay + 0.05);
     expect(Math.sign(intent.move.x)).toBe(Math.sign(landing!.x - me.pos.x));
 
     // When shuttle travels back toward opponent (vel.z > 0), bot drifts back to base (x=0, z=-3.5)
@@ -36,7 +36,7 @@ describe('bot AI', () => {
       pos: { x: 1.5, y: 2.0, z: -2.0 },
       vel: { x: -1.0, y: 4.0, z: 12.0 },
     };
-    const returnIntent = botIntent(bot, offCourtMe, opp, outgoing, 0.05, false);
+    const returnIntent = botIntent(bot, offCourtMe, solo(opp, false), outgoing, 0.05);
     expect(returnIntent.move.x).toBeLessThan(0); // moving back toward x = 0
     expect(returnIntent.move.z).toBeGreaterThan(0); // moving from -5.5 toward -3.5
   });
@@ -53,8 +53,8 @@ describe('bot AI', () => {
 
     // At t = 0.20 s (past hard's 0.12 s delay, but before easy's 0.45 s delay):
     const dt = 0.20;
-    const hardIntent = botIntent(hardBot, me, opp, shuttle, dt, false);
-    const easyIntent = botIntent(easyBot, me, opp, shuttle, dt, false);
+    const hardIntent = botIntent(hardBot, me, solo(opp, false), shuttle, dt);
+    const easyIntent = botIntent(easyBot, me, solo(opp, false), shuttle, dt);
 
     expect(Math.hypot(hardIntent.move.x, hardIntent.move.z)).toBeGreaterThan(0);
     expect(Math.hypot(easyIntent.move.x, easyIntent.move.z)).toBe(0);
@@ -68,14 +68,7 @@ describe('bot AI', () => {
     const seenShots = new Set<ShotType>();
     for (let trial = 0; trial < 30; trial++) {
       // Alternate velocity sign so each trial triggers a fresh incoming shot evaluation
-      botIntent(
-        easyBot,
-        createPlayer(balancedStats, 'far', { x: 0, y: 0, z: -4.2 }),
-        opp,
-        { pos: { x: 0, y: 2, z: -2 }, vel: { x: 0, y: 2, z: 8 } },
-        0.05,
-        false,
-      );
+      botIntent(easyBot, createPlayer(balancedStats, 'far', { x: 0, y: 0, z: -4.2 }), solo(opp, false), { pos: { x: 0, y: 2, z: -2 }, vel: { x: 0, y: 2, z: 8 } }, 0.05);
 
       const me = createPlayer(balancedStats, 'far', { x: 0, y: 0, z: -4.5 });
       const highShuttle: ShuttleState = {
@@ -84,7 +77,7 @@ describe('bot AI', () => {
       };
 
       // Step past easy reaction delay and right up to contact
-      const intent = botIntent(easyBot, me, opp, highShuttle, 0.5, false);
+      const intent = botIntent(easyBot, me, solo(opp, false), highShuttle, 0.5);
       if (intent.charging) seenShots.add(intent.charging);
       if (intent.release) seenShots.add(intent.release);
       if (intent.basicSwing) seenShots.add('basic');
@@ -107,7 +100,7 @@ describe('bot AI', () => {
       vel: { x: 0, y: -0.5, z: -2.0 },
     };
 
-    const intent = botIntent(hardBot, me, opp, highAtRacket, 0.2, false);
+    const intent = botIntent(hardBot, me, solo(opp, false), highAtRacket, 0.2);
     expect(intent.release).toBe('smash');
     expect(intent.racketVel.x).not.toBe(0);
   });
@@ -121,11 +114,11 @@ describe('bot AI', () => {
       vel: { x: 0, y: 0, z: 0 },
     };
 
-    const chargingFrame = botIntent(bot, me, opp, heldShuttle, 0.1, true);
+    const chargingFrame = botIntent(bot, me, solo(opp, true), heldShuttle, 0.1);
     expect(chargingFrame.charging === 'serveShort' || chargingFrame.charging === 'serveLong').toBe(true);
     expect(chargingFrame.release).toBeNull();
 
-    const releaseFrame = botIntent(bot, me, opp, heldShuttle, BOT_TUNING.serveChargeDuration, true);
+    const releaseFrame = botIntent(bot, me, solo(opp, true), heldShuttle, BOT_TUNING.serveChargeDuration);
     expect(releaseFrame.release === 'serveShort' || releaseFrame.release === 'serveLong').toBe(true);
     expect(releaseFrame.chargeTime).toBeGreaterThan(0);
     expect(releaseFrame.racketVel.x).not.toBe(0);
@@ -143,7 +136,7 @@ describe('bot AI', () => {
     const dt = 1 / 120;
     let hitOccurred = false;
     for (let i = 0; i < 240; i++) {
-      const intent = botIntent(bot, me, opp, shuttle, dt, false);
+      const intent = botIntent(bot, me, solo(opp, false), shuttle, dt);
       // Put racket on forehand side when shuttle is on forehand side
       if (shuttle.pos.x < me.pos.x - 0.1) {
         // For 'far' side (sgn = -1), world x < me.pos.x is forehand (+racket.x)
@@ -173,7 +166,7 @@ describe('bot AI', () => {
       pos: { x: 0, y: 2.2, z: -3.1 },
       vel: { x: 0, y: -1.0, z: -4.0 },
     };
-    const firstSwing = botIntent(bot, me, opp, incoming1, 0.2, false);
+    const firstSwing = botIntent(bot, me, solo(opp, false), incoming1, 0.2);
     expect(firstSwing.release !== null || firstSwing.basicSwing !== null || firstSwing.netShot).toBe(true);
 
     // Point ends: shuttle is dead (speed ~ 0) between points
@@ -181,14 +174,14 @@ describe('bot AI', () => {
       pos: { x: 0.8, y: 1.0, z: 2.0 },
       vel: { x: 0, y: 0, z: 0 },
     };
-    botIntent(bot, me, opp, deadShuttle, 0.05, false);
+    botIntent(bot, me, solo(opp, false), deadShuttle, 0.05);
 
     // Point 2: opponent serves again from the same direction (vel.z < 0)
     const incoming2: ShuttleState = {
       pos: { x: 0.8, y: 2.2, z: 0.5 },
       vel: { x: 0.4, y: 2.5, z: -9.0 },
     };
-    const afterDelay = botIntent(bot, me, opp, incoming2, BOT_TUNING.hard.reactionDelay + 0.05, false);
+    const afterDelay = botIntent(bot, me, solo(opp, false), incoming2, BOT_TUNING.hard.reactionDelay + 0.05);
     expect(Math.hypot(afterDelay.move.x, afterDelay.move.z)).toBeGreaterThan(0);
 
     // When the second shuttle reaches the racket head, the bot releases a swing again
@@ -196,7 +189,7 @@ describe('bot AI', () => {
       pos: { x: 0, y: 2.2, z: -3.1 },
       vel: { x: 0, y: -1.0, z: -4.0 },
     };
-    const secondSwing = botIntent(bot, me, opp, atRacket2, 0.05, false);
+    const secondSwing = botIntent(bot, me, solo(opp, false), atRacket2, 0.05);
     expect(secondSwing.release !== null || secondSwing.basicSwing !== null || secondSwing.netShot).toBe(true);
   });
 
@@ -219,7 +212,7 @@ describe('bot AI', () => {
         const dt = 0.05;
         let hitLaunch: ShuttleState | null = null;
         for (let step = 0; step < 20; step++) {
-          const intent = botIntent(bot, me, opp, shuttleAtRacket, dt, true);
+          const intent = botIntent(bot, me, solo(opp, true), shuttleAtRacket, dt);
           const res = stepPlayer(me, intent, shuttleAtRacket, dt, 1.0);
           me = res.player;
           if (res.hit) {

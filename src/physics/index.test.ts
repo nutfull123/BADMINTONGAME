@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ShuttleState } from '../types';
-import { COURT, isInServiceBox, isInSingles, predictLanding, stepShuttle } from './index';
+import { COURT, isInCourt, isInServiceBox, isInSingles, predictLanding, serviceBox, stepShuttle } from './index';
 
 const speed = (s: ShuttleState) => Math.hypot(s.vel.x, s.vel.y, s.vel.z);
 const v = (x: number, y: number, z: number) => ({ x, y, z });
@@ -95,5 +95,20 @@ describe('court', () => {
     expect(isInServiceBox(v(-1, 0, -1.97), 'far', 'right')).toBe(false);
     expect(isInServiceBox(v(-1, 0, -6.71), 'far', 'right')).toBe(false);
     expect(COURT.shortServiceLine).toBe(1.98);
+  });
+});
+
+describe('doubles court', () => {
+  it('rally court is the full doubles width; serve box is wider but ends at the doubles long service line', () => {
+    expect(isInCourt({ x: 2.9, y: 0, z: -4 }, 'far', true)).toBe(true);
+    expect(isInCourt({ x: 2.9, y: 0, z: -4 }, 'far', false)).toBe(false);
+    expect(isInCourt({ x: 0, y: 0, z: 6.5 }, 'near', true)).toBe(true);
+    // serve: 6.3 m deep is in for singles, out (long) for doubles; 2.9 m wide is out for singles, in for doubles
+    expect(isInServiceBox({ x: -1, y: 0, z: -6.3 }, 'far', 'right', false)).toBe(true);
+    expect(isInServiceBox({ x: -1, y: 0, z: -6.3 }, 'far', 'right', true)).toBe(false);
+    expect(isInServiceBox({ x: -2.9, y: 0, z: -4 }, 'far', 'right', true)).toBe(true);
+    expect(isInServiceBox({ x: -2.9, y: 0, z: -4 }, 'far', 'right', false)).toBe(false);
+    const b = serviceBox('near', 'left', true);
+    expect([b.xMin, b.xMax, b.zMin, b.zMax]).toEqual([-3.05, 0, 1.98, 5.94]);
   });
 });

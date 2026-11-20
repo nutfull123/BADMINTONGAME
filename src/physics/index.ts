@@ -4,7 +4,9 @@ import type { ServiceCourt, ShuttleEvent, ShuttleState, Side, Vec3 } from '../ty
 export const COURT = {
   halfLength: 6.7,
   halfWidthSingles: 2.59,
+  halfWidthDoubles: 3.05,
   shortServiceLine: 1.98,
+  longServiceLineDoubles: 5.94, // doubles serve must land in front of this (0.76 m inside the back line)
   netHeightCentre: 1.524,
   netHeightPost: 1.55,
 } as const;
@@ -65,22 +67,31 @@ export function predictLanding(s: ShuttleState): Vec3 | null {
 // Positive z-distance from the net into `side`'s half, so near and far share one check.
 const depth = (at: Vec3, side: Side) => (side === 'near' ? at.z : -at.z);
 
+export function isInCourt(at: Vec3, side: Side, doubles: boolean): boolean {
+  const d = depth(at, side);
+  const halfW = doubles ? COURT.halfWidthDoubles : COURT.halfWidthSingles;
+  return d >= 0 && d <= COURT.halfLength && Math.abs(at.x) <= halfW;
+}
+
 export function isInSingles(at: Vec3, side: Side): boolean {
   const d = depth(at, side);
   return d >= 0 && d <= COURT.halfLength && Math.abs(at.x) <= COURT.halfWidthSingles;
 }
 
 // World-axis bounds of `side`'s singles service court (lines included). Own right is +x for near, -x for far.
-export function serviceBox(side: Side, court: ServiceCourt): { xMin: number; xMax: number; zMin: number; zMax: number } {
+// Doubles: full doubles width but only back to the doubles long service line (BWF Law 1, Diagram A).
+export function serviceBox(
+  side: Side, court: ServiceCourt, doubles = false,
+): { xMin: number; xMax: number; zMin: number; zMax: number } {
   const plusX = (side === 'near') === (court === 'right');
-  const [xMin, xMax] = plusX ? [0, COURT.halfWidthSingles] : [-COURT.halfWidthSingles, 0];
-  const [zMin, zMax] = side === 'near'
-    ? [COURT.shortServiceLine, COURT.halfLength]
-    : [-COURT.halfLength, -COURT.shortServiceLine];
+  const halfW = doubles ? COURT.halfWidthDoubles : COURT.halfWidthSingles;
+  const back = doubles ? COURT.longServiceLineDoubles : COURT.halfLength;
+  const [xMin, xMax] = plusX ? [0, halfW] : [-halfW, 0];
+  const [zMin, zMax] = side === 'near' ? [COURT.shortServiceLine, back] : [-back, -COURT.shortServiceLine];
   return { xMin, xMax, zMin, zMax };
 }
 
-export function isInServiceBox(at: Vec3, receiverSide: Side, court: ServiceCourt): boolean {
-  const b = serviceBox(receiverSide, court);
+export function isInServiceBox(at: Vec3, receiverSide: Side, court: ServiceCourt, doubles = false): boolean {
+  const b = serviceBox(receiverSide, court, doubles);
   return at.x >= b.xMin && at.x <= b.xMax && at.z >= b.zMin && at.z <= b.zMax;
 }

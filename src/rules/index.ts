@@ -1,4 +1,4 @@
-import type { GameScore, MatchConfig, MatchState, Side } from '../types';
+import type { GameScore, MatchConfig, MatchState, Side, Slot } from '../types';
 
 export const FORMAT_3X15: MatchConfig = {
   pointsToWin: 15,
@@ -33,7 +33,7 @@ function gameWinner(config: MatchConfig, score: GameScore): Side | null {
 
 // A fresh match: no games played, the given side serves first. Serving from the
 // right court follows from the server's own score being 0 (even).
-export function createMatch(config: MatchConfig, firstServer: Side): MatchState {
+export function createMatch(config: MatchConfig, firstServer: Side, doubles = false): MatchState {
   return {
     config: { ...config },
     score: { near: 0, far: 0 },
@@ -44,6 +44,8 @@ export function createMatch(config: MatchConfig, firstServer: Side): MatchState 
     endsSwapped: false,
     intervalNow: false,
     winner: null,
+    doubles,
+    rightCourt: { near: 0, far: 0 },
   };
 }
 
@@ -58,6 +60,8 @@ export function awardRally(state: MatchState, rallyWinner: Side): MatchState {
     server: state.server,
     serviceCourt: state.serviceCourt,
     endsSwapped: state.endsSwapped,
+    doubles: state.doubles,
+    rightCourt: { ...state.rightCourt }, // shortcut: doubles court swaps (BWF Law 11.3) are task D1
     intervalNow: state.intervalNow,
     winner: state.winner,
   };
@@ -97,4 +101,20 @@ export function awardRally(state: MatchState, rallyWinner: Side): MatchState {
     if (next.gamesWon[wonBy] >= state.config.gamesToWin) next.winner = wonBy;
   }
   return next;
+}
+
+const otherSlot = (s: Slot): Slot => (s === 0 ? 1 : 0);
+
+// The serving side's player in the service court for its score (BWF Law 11.1). Singles: always 0.
+export function serverSlot(state: MatchState): Slot {
+  if (!state.doubles) return 0;
+  const right = state.rightCourt[state.server];
+  return state.serviceCourt === 'right' ? right : otherSlot(right);
+}
+
+// The receiving side's player in the same-named (diagonal) service court (BWF Law 11.1.4). Singles: always 0.
+export function receiverSlot(state: MatchState): Slot {
+  if (!state.doubles) return 0;
+  const right = state.rightCourt[opposite(state.server)];
+  return state.serviceCourt === 'right' ? right : otherSlot(right);
 }

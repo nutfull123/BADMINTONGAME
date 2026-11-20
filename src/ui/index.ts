@@ -1,4 +1,4 @@
-import type { BodyType, MatchState, Side, Stats } from '../types';
+import type { BodyType, MatchEvent, MatchState, Side, Stats } from '../types';
 
 export const STAT_BUDGET = 20;
 
@@ -11,6 +11,7 @@ export interface Settings {
   format: '3x15' | '3x21';  // default '3x15'
   botLevel: 'easy' | 'medium' | 'hard'; // default 'medium'
   mode: 'easy' | 'normal' | 'pro' | 'timing'; // demo assist mode, default 'easy'
+  event: MatchEvent; // default 'MS'; must fit the player's gender (MS/MD for men, WS/WD for women, XD for both)
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -20,6 +21,7 @@ export const DEFAULT_SETTINGS: Settings = {
   format: '3x15',
   botLevel: 'medium',
   mode: 'easy',
+  event: 'MS',
 };
 
 const MODE_DESC: Record<Settings['mode'], string> = {
@@ -30,9 +32,9 @@ const MODE_DESC: Record<Settings['mode'], string> = {
 };
 
 export const PRESETS: Record<BodyType, Stats> = {
-  tall: { body: 'tall', speed: 3, power: 8, recovery: 3, stamina: 6 },
-  balanced: { body: 'balanced', speed: 5, power: 5, recovery: 5, stamina: 5 },
-  short: { body: 'short', speed: 8, power: 3, recovery: 4, stamina: 5 },
+  tall: { gender: 'male', body: 'tall', speed: 3, power: 8, recovery: 3, stamina: 6 },
+  balanced: { gender: 'male', body: 'balanced', speed: 5, power: 5, recovery: 5, stamina: 5 },
+  short: { gender: 'male', body: 'short', speed: 8, power: 3, recovery: 4, stamina: 5 },
 };
 
 export function budgetLeft(stats: Stats): number {

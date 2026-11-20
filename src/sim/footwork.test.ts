@@ -4,7 +4,7 @@ import { footworkOf } from './footwork';
 import type { Intent, PlayerState, ShuttleState, Stats } from '../types';
 
 const DT = 1 / 120;
-const stats: Stats = { body: 'balanced', speed: 5, power: 5, recovery: 5, stamina: 5 };
+const stats: Stats = { gender: 'male', body: 'balanced', speed: 5, power: 5, recovery: 5, stamina: 5 };
 const intent = (o: Partial<Intent> = {}): Intent => ({
   move: { x: 0, z: 0 }, racket: { x: 0, y: 0 }, racketVel: { x: 0.7, y: 0 }, charging: null, chargeTime: 0,
   release: null, basicSwing: null, jumpCharge: 0, jumpRelease: false, dive: false, netShot: false, ...o,

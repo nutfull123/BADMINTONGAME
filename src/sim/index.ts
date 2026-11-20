@@ -1,6 +1,6 @@
 // Player movement, stats, stamina, racket plane, swing, hits and dive. Pure: no three, no DOM.
 // facing f points along (sin f, 0, netDir * cos f) where netDir = -1 for near, +1 for far.
-import type { HitResult, Intent, PlayerAction, PlayerState, ShotType, ShuttleState, Side, Stats, Vec3 } from '../types';
+import type { HitResult, Intent, PlayerAction, PlayerState, ShotType, ShuttleState, Side, Slot, Stats, Vec3 } from '../types';
 import { COURT, predictLanding } from '../physics';
 import { launchShuttle } from './shots';
 import type { FootworkView } from './footwork';
@@ -14,7 +14,8 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const sgnOf = (s: Side) => (s === 'near' ? 1 : -1); // +1 when the player's right is +x and the net is at -z
 
 export function validateStats(s: Stats): string | null {
-  if (!Object.hasOwn(T.HEIGHT, s.body)) return `unknown body "${s.body}"`;
+  if (!Object.hasOwn(T.HEIGHT, s.gender)) return `unknown gender "${s.gender}"`;
+  if (!Object.hasOwn(T.HEIGHT[s.gender], s.body)) return `unknown body "${s.body}"`;
   for (const k of ['speed', 'power', 'recovery', 'stamina'] as const) {
     if (!Number.isFinite(s[k]) || s[k] < 0 || s[k] > T.STAT_MAX) return `${k} must be between 0 and ${T.STAT_MAX}`;
   }
@@ -69,9 +70,9 @@ function nearest(c: Vec3, a: Vec3, b: Vec3): { d: number; point: Vec3 } {
 
 const isServe = (s: ShotType | null) => s === 'serveShort' || s === 'serveLong';
 
-export function createPlayer(stats: Stats, side: Side, at: Vec3): PlayerState {
+export function createPlayer(stats: Stats, side: Side, at: Vec3, slot: Slot = 0): PlayerState {
   const p: SimPlayer = {
-    side, stats, pos: { ...at }, vel: { x: 0, y: 0, z: 0 }, facing: 0,
+    side, slot, stats, pos: { ...at }, vel: { x: 0, y: 0, z: 0 }, facing: 0,
     racketHead: { x: at.x, y: 0, z: at.z }, action: 'idle', staminaNow: 1, fatigue: 0, getUpPressesLeft: 0,
   };
   p.racketHead = racketHeadFor(p, 0, 0, false, false);
@@ -79,8 +80,8 @@ export function createPlayer(stats: Stats, side: Side, at: Vec3): PlayerState {
 }
 
 export function racketHeadFor(p: PlayerState, rx: number, ry: number, serve: boolean, diving: boolean): Vec3 {
-  const h = T.HEIGHT[p.stats.body];
-  const lateral = T.REACH_LATERAL_BASE + T.REACH_LATERAL_PER_M * (h - T.HEIGHT.balanced);
+  const h = T.heightOf(p.stats);
+  const lateral = T.REACH_LATERAL_BASE + T.REACH_LATERAL_PER_M * (h - T.HEIGHT_REF);
   const top = h * T.RACKET_TOP_FACTOR + T.RACKET_TOP_OFFSET;
   let y = lerp(T.RACKET_LOW, top, (clamp(ry, -1, 1) + 1) / 2) + p.pos.y;
   if (serve) y = Math.min(y, T.SERVE_MAX_CONTACT);
@@ -287,7 +288,7 @@ export function stepPlayer(
     const { d, point } = nearest(p.racketHead, prev, shuttle.pos);
     const radius = T.HIT_RADIUS_BASE + clamp(assist, 0, 1) * T.HIT_RADIUS_ASSIST + (diving ? T.DIVE_RADIUS_BONUS : 0);
     // lunge: running at the net, a racket that reaches further forward may catch what the normal reach misses
-    const lungeHead: Vec3 = { ...p.racketHead, z: p.racketHead.z - sgn * T.LUNGE_REACH * (T.HEIGHT[stats.body] / T.HEIGHT.balanced) };
+    const lungeHead: Vec3 = { ...p.racketHead, z: p.racketHead.z - sgn * T.LUNGE_REACH * (T.heightOf(stats) / T.HEIGHT_REF) };
     if (!diving && -sgn * vel.z > T.LUNGE_MIN_SPEED) {
       const l = nearest(lungeHead, prev, shuttle.pos);
       if (l.d <= radius && (!swing.lungeBest || l.d < swing.lungeBest.d)) {

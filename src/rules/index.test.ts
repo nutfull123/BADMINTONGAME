@@ -45,6 +45,8 @@ describe('createMatch', () => {
       endsSwapped: false,
       intervalNow: false,
       winner: null,
+      doubles: false,
+      rightCourt: { near: 0, far: 0 },
     });
   });
 });

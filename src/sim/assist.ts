@@ -10,8 +10,8 @@ const sgnOf = (s: Side) => (s === 'near' ? 1 : -1);
 
 // Inverse of racketHeadFor in index.ts: the racket input that puts the head closest to `target`.
 export function racketInputFor(p: PlayerState, target: Vec3): { x: number; y: number } {
-  const h = T.HEIGHT[p.stats.body];
-  const lateral = T.REACH_LATERAL_BASE + T.REACH_LATERAL_PER_M * (h - T.HEIGHT.balanced);
+  const h = T.heightOf(p.stats);
+  const lateral = T.REACH_LATERAL_BASE + T.REACH_LATERAL_PER_M * (h - T.HEIGHT_REF);
   const top = h * T.RACKET_TOP_FACTOR + T.RACKET_TOP_OFFSET;
   return {
     x: clamp(((target.x - p.pos.x) * sgnOf(p.side)) / lateral, -1, 1),

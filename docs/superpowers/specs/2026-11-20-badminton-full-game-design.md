@@ -89,7 +89,7 @@ Desktop mouse+keyboard only now; mobile later would need a different control sch
 - Five events: MS, WS, MD, WD, XD.
 - A character has a gender (male/female) chosen at creation. Gender changes the look and the height
   range on offer; it does not change the stat budget.
-  Claude's call for heights: male tall 1.95 / balanced 1.80 / short 1.68 m;
+  Claude's call for heights: male tall 1.95 / balanced 1.78 / short 1.63 m (unchanged from the demo);
   female tall 1.82 / balanced 1.68 / short 1.58 m.
 - Gender and height are fixed after creation. A player can own several characters.
 - Event gender rules (MS men, WS women, MD two men, WD two women, XD one man + one woman per side) are

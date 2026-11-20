@@ -3,7 +3,7 @@ import type { BodyType, Intent, PlayerState, ShuttleState, Stats } from '../type
 import { STAT_BUDGET, createPlayer, stepPlayer, validateStats } from './index';
 
 const stats = (body: BodyType = 'balanced', o: Partial<Stats> = {}): Stats => ({
-  body, speed: 5, power: 5, recovery: 5, stamina: 5, ...o,
+  gender: 'male', body, speed: 5, power: 5, recovery: 5, stamina: 5, ...o,
 });
 const idle: Intent = {
   move: { x: 0, z: 0 }, racket: { x: 0, y: 0 }, racketVel: { x: 0, y: 0 },
@@ -32,7 +32,7 @@ describe('stats', () => {
     expect(validateStats(stats('tall', { speed: 6 }))).toMatch(/20/);
     expect(validateStats(stats('tall', { speed: 11, power: 0, recovery: 0, stamina: 0 }))).not.toBeNull();
     expect(validateStats(stats('tall', { speed: -1 }))).not.toBeNull();
-    expect(validateStats({ ...stats(), body: 'giant' as BodyType })).not.toBeNull();
+    expect(validateStats({ ...stats(), gender: 'male', body: 'giant' as BodyType })).not.toBeNull();
   });
   it('body fixes height', () => {
     expect(spawn('tall').racketHead.y).toBeGreaterThan(0);

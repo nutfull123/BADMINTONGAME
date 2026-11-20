@@ -4,12 +4,12 @@ import type { Stats } from '../types';
 
 describe('budgetLeft & stat budget rules', () => {
   it('returns 20 when all stats are 0', () => {
-    const stats: Stats = { body: 'balanced', speed: 0, power: 0, recovery: 0, stamina: 0 };
+    const stats: Stats = { gender: 'male', body: 'balanced', speed: 0, power: 0, recovery: 0, stamina: 0 };
     expect(budgetLeft(stats)).toBe(20);
   });
 
   it('returns remaining points for partial allocations', () => {
-    const stats: Stats = { body: 'tall', speed: 3, power: 4, recovery: 2, stamina: 5 };
+    const stats: Stats = { gender: 'male', body: 'tall', speed: 3, power: 4, recovery: 2, stamina: 5 };
     expect(budgetLeft(stats)).toBe(6);
   });
 
@@ -20,7 +20,7 @@ describe('budgetLeft & stat budget rules', () => {
   });
 
   it('clamps a stat change so total never exceeds 20 and each stat stays within 0..10', () => {
-    const current: Stats = { body: 'balanced', speed: 6, power: 6, recovery: 5, stamina: 0 };
+    const current: Stats = { gender: 'male', body: 'balanced', speed: 6, power: 6, recovery: 5, stamina: 0 };
     // 3 points left; requesting stamina = 8 should clamp stamina to 3
     const next = clampStatToBudget(current, 'stamina', 8);
     expect(next.stamina).toBe(3);
@@ -32,7 +32,7 @@ describe('budgetLeft & stat budget rules', () => {
     expect(budgetLeft(lowered)).toBe(6);
 
     // Raising a stat when plenty of budget left still clamps at 10
-    const maxed = clampStatToBudget({ body: 'short', speed: 0, power: 0, recovery: 0, stamina: 0 }, 'speed', 15);
+    const maxed = clampStatToBudget({ gender: 'male', body: 'short', speed: 0, power: 0, recovery: 0, stamina: 0 }, 'speed', 15);
     expect(maxed.speed).toBe(10);
     expect(budgetLeft(maxed)).toBe(10);
   });

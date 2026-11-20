@@ -7,7 +7,7 @@ import { FORMAT_3X15, createMatch } from '../rules';
 import { chargeLevel, createPlayer, recoverBetweenPoints, stepPlayer, validateStats } from '../sim';
 import { applyAssist } from '../sim/assist';
 import { ASSIST_GAME_SPEED, SERVE_MAX_CONTACT } from '../sim/tuning';
-import { createHud, PRESETS, type Settings } from '../ui';
+import { createHud, createViewControls, PRESETS, type Settings } from '../ui';
 import type { Intent, MatchState, PlayerState, ServiceCourt, ShuttleState, Stats, Vec3, WorldView } from '../types';
 import { aimServe, serveSpots, STEP } from './rally';
 import { createTutorial, type Attempt, type Progress } from '../tutorial';
@@ -47,6 +47,7 @@ export function startTutorial(root: HTMLElement, setup: TutorialSetup, onAgain: 
   const renderer = createRenderer(container);
   const input = createInput(container.querySelector('canvas')!);
   const hud = createHud(root);
+  const viewControls = createViewControls(root, (z) => renderer.setZoom?.(z)); // setZoom comes with the render task
   const hudMatch: MatchState = createMatch(FORMAT_3X15, 'near');
 
   const tut = createTutorial();
@@ -306,6 +307,7 @@ export function startTutorial(root: HTMLElement, setup: TutorialSetup, onAgain: 
     window.removeEventListener('keydown', onKey);
     input.dispose();
     hud.dispose();
+    viewControls.dispose();
     renderer.dispose();
     container.remove();
     if (document.pointerLockElement) document.exitPointerLock();

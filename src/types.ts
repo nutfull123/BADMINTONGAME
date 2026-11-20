@@ -147,3 +147,68 @@ export interface AimView {
   side: 'forehand' | 'backhand';
   onTarget: boolean;
 }
+
+// ---------- app/ (pure: settings, characters, local save). ui/ draws the pages, game/ applies them ----------
+
+// The flat settings a match or tutorial reads (built from GameSettings by app/settings toMatchSettings).
+export interface MatchSettings {
+  hitAssist: number;        // 0..100
+  landingMarker: boolean;
+  timingRing: boolean;
+  format: '3x15' | '3x21';
+  botLevel: 'easy' | 'medium' | 'hard';
+  mode: 'easy' | 'normal' | 'pro' | 'timing'; // assist mode
+  event: MatchEvent;        // must fit the character's gender
+}
+
+export type CameraPreset = 'behindLow' | 'behindHigh' | 'broadcast';
+export interface CameraSettings {
+  preset: CameraPreset;
+  height: number;   // -1..1 offset from the preset's camera height
+  distance: number; // -1..1 offset from the preset's distance (+ = farther)
+  zoom: number;     // 0.6..1.6 starting zoom
+  follow: boolean;  // follow the human sideways
+}
+
+export type InputAction =
+  | 'up' | 'down' | 'left' | 'right' | 'backhand' | 'forehand' | 'smash' | 'drop' | 'clear'
+  | 'jump' | 'dive' | 'net' | 'fullscreen' | 'zoomIn' | 'zoomOut';
+export type KeyBindings = Record<InputAction, string[]>; // KeyboardEvent.code values, or 'Mouse0' / 'Mouse2'
+
+export interface ControlSettings {
+  mouseSensitivity: number; // 0.25..3, 1 = default
+  keys: KeyBindings;
+}
+
+export type GraphicsQuality = 'low' | 'medium' | 'high';
+
+export interface GameSettings {
+  camera: CameraSettings;
+  controls: ControlSettings;
+  assists: { mode: MatchSettings['mode']; hitAssist: number; landingMarker: boolean; timingRing: boolean; racketAid: boolean };
+  graphics: { quality: GraphicsQuality };
+  match: { event: MatchEvent; format: MatchSettings['format']; botLevel: MatchSettings['botLevel'] };
+}
+
+export interface Character {
+  id: string;
+  name: string;
+  stats: Stats;        // gender and body fixed after creation
+  earnedPoints: number; // extra stat points from offline play (phase 4); budget = 20 + earnedPoints, max 40
+  createdAt: number;   // ms since epoch
+}
+
+export interface SaveData {
+  version: 1;
+  characters: Character[];
+  activeCharacterId: string | null;
+  settings: GameSettings;
+}
+
+// app/ must export:
+//   settings.ts: DEFAULT_GAME_SETTINGS, DEFAULT_KEYS, toMatchSettings(s: GameSettings): MatchSettings
+//   save.ts: interface StorageLike { getItem; setItem; removeItem }; loadSave(storage?): SaveData (never throws:
+//            missing or broken data gives defaults); writeSave(data, storage?): void; SAVE_KEY
+//   characters.ts: newCharacterId(); characterBudget(c): number; createCharacter(save, name, stats): SaveData;
+//            updateCharacter(save, id, patch: { name?; stats? }): SaveData (gender/body cannot change);
+//            deleteCharacter(save, id): SaveData; setActiveCharacter(save, id): SaveData; activeCharacter(save): Character | null

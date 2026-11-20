@@ -233,6 +233,23 @@ describe('doubles', () => {
     expect(r.result).toEqual({ winner: 'far', reason: 'fault' });
   });
 
+  it('a long doubles serve lands in the doubles service box, not past the doubles long service line', () => {
+    const longServe = (t: number, p: PlayerState): Intent => {
+      const i = idle();
+      if (t < 0.6) { i.charging = 'serveLong'; i.chargeTime = t; } else if (t < 0.6 + STEP * 1.5) { i.release = 'serveLong'; i.chargeTime = 0.6; }
+      return aimServe(i, p);
+    };
+    for (const r of [0, 0.5, 0.999]) {
+      setRandom(() => r);
+      const out = runRally({
+        match: doublesMatch(), players: doubles(),
+        intent: (side, slot, rr, t) => (side === 'near' && slot === rr.serverSlot ? longServe(t, rr.players.near[slot]) : idle()),
+      });
+      expect(out.result).toEqual({ winner: 'near', reason: 'in' });
+    }
+    setRandom(Math.random);
+  });
+
   it('a short doubles serve lands in the doubles service box', () => {
     setRandom(() => 0.5);
     const out = runRally({

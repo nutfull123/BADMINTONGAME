@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { predictLanding, stepShuttle } from '../physics';
+import { COURT, predictLanding, stepShuttle } from '../physics';
 import type { BodyType, HitResult, Intent, PlayerState, ShuttleState, Stats, Vec3 } from '../types';
 import { createPlayer, setRandom, stepPlayer } from './index';
+import { launchShuttle } from './shots';
 
 const stats = (body: BodyType = 'balanced', o: Partial<Stats> = {}): Stats => ({
   gender: 'male', body, speed: 5, power: 5, recovery: 5, stamina: 5, ...o,
@@ -229,5 +230,33 @@ describe('shots', () => {
   it('serve contact stays below 1.15 m even with the racket held high', () => {
     const held = stepPlayer(spawn('tall', 'near', 2.2), { ...idle, racket: { x: 0, y: 1 }, charging: 'serveShort', chargeTime: 0.2 }, farShuttle, DT, 1).player;
     expect(held.racketHead.y).toBeLessThanOrEqual(1.15);
+  });
+});
+
+describe('doubles long serve', () => {
+  // BWF Law 1: a doubles serve must land in front of the doubles long service line (5.94 m from the net).
+  const depthOf = (doubles: boolean, charge: number, r: number) => {
+    setRandom(() => r);
+    const launch = launchShuttle({
+      shot: 'serveLong', side: 'near', contact: { x: 1.2, y: 1.1, z: 2.2 }, flick: { x: -2.4, y: 0 },
+      charge, perfect: false, weak: false, stats: stats(), doubles,
+    });
+    return -predictLanding(launch)!.z;
+  };
+
+  it('lands inside the doubles service box at every charge and aim error', () => {
+    for (const charge of [0, 0.5, 1]) {
+      for (const r of [0, 0.5, 0.999]) {
+        const d = depthOf(true, charge, r);
+        expect(d).toBeGreaterThan(COURT.shortServiceLine);
+        expect(d).toBeLessThanOrEqual(COURT.longServiceLineDoubles + 0.05);
+      }
+    }
+    setRandom(Math.random);
+  });
+
+  it('still goes deep past the doubles line in singles', () => {
+    expect(depthOf(false, 1, 0.5)).toBeGreaterThan(COURT.longServiceLineDoubles);
+    setRandom(Math.random);
   });
 });

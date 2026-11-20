@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { FORMAT_3X15, FORMAT_3X21, awardRally, createMatch } from './index';
-import type { MatchState, Side } from '../types';
+import { FORMAT_3X15, FORMAT_3X21, awardRally, createMatch, receiverSlot, serverSlot } from './index';
+import type { MatchState, ServiceCourt, Side, Slot } from '../types';
 
 // Fold a list of rally winners through the pure reducer.
 const play = (state: MatchState, winners: Side[]): MatchState =>
@@ -262,5 +262,94 @@ describe('3x21 deuce', () => {
     expect(at21.completedGames).toEqual([]);
     const at22 = awardRally(at21, 'near');
     expect(at22.completedGames).toEqual([{ near: 22, far: 20 }]);
+  });
+});
+
+describe('doubles service order (BWF Law 11)', () => {
+  it('matches the 8-rally worked example from doubles-rules.md (N1=near 0, N2=near 1, F1=far 0, F2=far 1)', () => {
+    let s = createMatch(FORMAT_3X15, 'near', true);
+    // Initial 0-0 before Rally 1: N1 (0) serves from right to F1 (0)
+    expect(s.score).toEqual({ near: 0, far: 0 });
+    expect(s.server).toBe('near');
+    expect(s.serviceCourt).toBe('right');
+    expect(serverSlot(s)).toBe(0);
+    expect(receiverSlot(s)).toBe(0);
+
+    const rallies: Array<{
+      winner: Side;
+      scoreAfter: { near: number; far: number };
+      nextServer: Side;
+      nextCourt: ServiceCourt;
+      nextServerSlot: Slot;
+      nextReceiverSlot: Slot;
+    }> = [
+      // Rally 1: near wins -> 1-0, N1 (0) serves from left to F2 (1)
+      { winner: 'near', scoreAfter: { near: 1, far: 0 }, nextServer: 'near', nextCourt: 'left', nextServerSlot: 0, nextReceiverSlot: 1 },
+      // Rally 2: far wins -> 1-1, F2 (1) serves from left to N1 (0)
+      { winner: 'far', scoreAfter: { near: 1, far: 1 }, nextServer: 'far', nextCourt: 'left', nextServerSlot: 1, nextReceiverSlot: 0 },
+      // Rally 3: far wins -> 1-2, F2 (1) serves from right to N2 (1)
+      { winner: 'far', scoreAfter: { near: 1, far: 2 }, nextServer: 'far', nextCourt: 'right', nextServerSlot: 1, nextReceiverSlot: 1 },
+      // Rally 4: far wins -> 1-3, F2 (1) serves from left to N1 (0)
+      { winner: 'far', scoreAfter: { near: 1, far: 3 }, nextServer: 'far', nextCourt: 'left', nextServerSlot: 1, nextReceiverSlot: 0 },
+      // Rally 5: near wins -> 2-3, N2 (1) serves from right to F1 (0)
+      { winner: 'near', scoreAfter: { near: 2, far: 3 }, nextServer: 'near', nextCourt: 'right', nextServerSlot: 1, nextReceiverSlot: 0 },
+      // Rally 6: near wins -> 3-3, N2 (1) serves from left to F2 (1)
+      { winner: 'near', scoreAfter: { near: 3, far: 3 }, nextServer: 'near', nextCourt: 'left', nextServerSlot: 1, nextReceiverSlot: 1 },
+      // Rally 7: far wins -> 3-4, F1 (0) serves from right to N1 (0)
+      { winner: 'far', scoreAfter: { near: 3, far: 4 }, nextServer: 'far', nextCourt: 'right', nextServerSlot: 0, nextReceiverSlot: 0 },
+      // Rally 8: near wins -> 4-4, N1 (0) serves from right to F1 (0)
+      { winner: 'near', scoreAfter: { near: 4, far: 4 }, nextServer: 'near', nextCourt: 'right', nextServerSlot: 0, nextReceiverSlot: 0 },
+    ];
+
+    for (const r of rallies) {
+      s = awardRally(s, r.winner);
+      expect(s.score).toEqual(r.scoreAfter);
+      expect(s.server).toBe(r.nextServer);
+      expect(s.serviceCourt).toBe(r.nextCourt);
+      expect(serverSlot(s)).toBe(r.nextServerSlot);
+      expect(receiverSlot(s)).toBe(r.nextReceiverSlot);
+    }
+  });
+
+  it('cycles serve N1 -> F2 -> N2 -> F1 -> N1 across consecutive side-outs (Law 11.4)', () => {
+    const tag = (s: MatchState) => `${s.server === 'near' ? 'N' : 'F'}${serverSlot(s) + 1}`;
+    let s = createMatch(FORMAT_3X15, 'near', true);
+    expect(tag(s)).toBe('N1');
+
+    s = awardRally(s, 'far'); // side-out 1: 0-1
+    expect(tag(s)).toBe('F2');
+
+    s = awardRally(s, 'near'); // side-out 2: 1-1
+    expect(tag(s)).toBe('N2');
+
+    s = awardRally(s, 'far'); // side-out 3: 1-2
+    expect(tag(s)).toBe('F1');
+
+    s = awardRally(s, 'near'); // side-out 4: 2-2
+    expect(tag(s)).toBe('N1');
+  });
+
+  it('resets rightCourt to { near: 0, far: 0 } at the start of a new game and never mutates rightCourt in singles', () => {
+    // Doubles: play 15 straight points for near (odd number of points won while serving swaps near's rightCourt to 1 before game end)
+    let doublesState = createMatch(FORMAT_3X15, 'near', true);
+    doublesState = awardRally(doublesState, 'near'); // 1-0 -> rightCourt.near === 1
+    expect(doublesState.rightCourt).toEqual({ near: 1, far: 0 });
+    for (let i = 1; i < 15; i++) {
+      doublesState = awardRally(doublesState, 'near');
+    }
+    expect(doublesState.completedGames).toEqual([{ near: 15, far: 0 }]);
+    expect(doublesState.score).toEqual({ near: 0, far: 0 });
+    expect(doublesState.rightCourt).toEqual({ near: 0, far: 0 });
+    expect(serverSlot(doublesState)).toBe(0);
+    expect(receiverSlot(doublesState)).toBe(0);
+
+    // Singles: rightCourt stays { near: 0, far: 0 } and serverSlot/receiverSlot stay 0
+    let singlesState = createMatch(FORMAT_3X15, 'near', false);
+    for (const w of ['near', 'near', 'far', 'near', 'far', 'far'] as const) {
+      singlesState = awardRally(singlesState, w);
+      expect(singlesState.rightCourt).toEqual({ near: 0, far: 0 });
+      expect(serverSlot(singlesState)).toBe(0);
+      expect(receiverSlot(singlesState)).toBe(0);
+    }
   });
 });

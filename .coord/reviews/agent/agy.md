@@ -1,19 +1,20 @@
-# Review of agent/agy (t7 bot) — reviewer: Sonnet (r7), round 2
-
-Round 1 (b6d92ef): CHANGES — bot freeze after a point ended on its side, loose numbers outside BOT_TUNING, no diagonal-serve test, unused field.
+# Review of agent/agy (v1 visuals) — reviewer: Sonnet (xv1)
 
 ## Standards
-- src/sim/bot.ts:161-168 - JUDGEMENT - botIntent has a 6th param `serving`; src/types.ts:112 comment lists 5 (callers must pass it)
+- src/render/index.ts:267-269 - JUDGEMENT - torso ignores yaw while shoulders/shorts rotate
+- src/render/index.ts:231-410, pose.ts - JUDGEMENT - small per-frame object churn (no geometry allocation)
+- src/render/index.ts:405 - JUDGEMENT - dead expression `yaw + (sgn === -1 ? 0 : 0)`
+- src/render/index.ts:517-537 - JUDGEMENT - drop line / trail bounding sphere at origin; set frustumCulled = false
+- src/render/index.ts:303 - JUDGEMENT - swing pose relies on sim racketHead motion plus small torso twist
 - HARD: none
 
 ## Spec
-1. freeze - FIXED (bot.ts:211-217 dead-shuttle reset, 181-182 serving reset; reviewer re-ran the reproduction for both sides and all 3 levels)
-2. numbers in BOT_TUNING - FIXED (bot.ts:19-24)
-3. diagonal serve test - FIXED (stepPlayer + predictLanding + isInServiceBox, both courts, short and long)
-4. Bot.chargingShot - removed
+- humanoids, racket IK, action poses, 2.6x shuttlecock cork-first, trail, drop line, pulsing yellow marker, raised camera: all PASS
+- IK can leave up to ~0.1 m hand-handle gap at full reach (cosmetic)
 
 ## Checks
-npx vitest run src/sim -> pass (56)
+npx vitest run -> pass (121)
 npx tsc --noEmit -> pass
+npx vite build -> pass
 
-APPROVE 28777cc
+APPROVE 55c7f06

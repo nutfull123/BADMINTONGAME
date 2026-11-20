@@ -1,5 +1,5 @@
 // Demo assists: auto racket, move pull and full auto-move. Pure: no three, no DOM.
-import type { Intent, PlayerState, ShuttleState, Side, Vec3 } from '../types';
+import type { AimView, Intent, PlayerState, ShuttleState, Side, Vec3 } from '../types';
 import { predictLanding, stepShuttle } from '../physics';
 import * as T from './tuning';
 
@@ -43,6 +43,19 @@ function intercept(p: PlayerState, shuttle: ShuttleState): Vec3 | null {
     s = state;
   }
   return s.pos;
+}
+
+// On-screen racket aid: racket.x > 0 (own right for near, own right for far) is the forehand side.
+export function aimView(p: PlayerState, shuttle: ShuttleState, assist: number): AimView {
+  const target = intercept(p, shuttle);
+  const h = p.racketHead;
+  const reach = T.HIT_RADIUS_BASE + clamp(assist, 0, 1) * T.HIT_RADIUS_ASSIST;
+  return {
+    racket: h,
+    target,
+    side: sgnOf(p.side) * (h.x - p.pos.x) >= 0 ? 'forehand' : 'backhand',
+    onTarget: !!target && Math.hypot(target.x - h.x, target.y - h.y, target.z - h.z) < reach,
+  };
 }
 
 export function autoRacket(p: PlayerState, shuttle: ShuttleState): { x: number; y: number } {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyAssist, autoRacket, moveToward, racketInputFor } from './assist';
+import { aimView, applyAssist, autoRacket, moveToward, racketInputFor } from './assist';
 import { createPlayer, racketHeadFor, stepPlayer } from './index';
 import { predictLanding, stepShuttle } from '../physics';
 import type { Intent, ShuttleState, Stats } from '../types';
@@ -13,6 +13,30 @@ const dist = (a: { x: number; y: number; z: number }, b: { x: number; y: number;
   Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 // a clear coming from the far end, landing in the near half
 const incoming: ShuttleState = { pos: { x: 0.5, y: 2.6, z: -2 }, vel: { x: 0.5, y: 4, z: 14 } };
+
+describe('aimView', () => {
+  it('reports forehand/backhand from the racket side, for both players', () => {
+    for (const side of ['near', 'far'] as const) {
+      const p = createPlayer(stats, side, { x: 0, y: 0, z: side === 'near' ? 3.5 : -3.5 });
+      expect(aimView({ ...p, racketHead: racketHeadFor(p, 0.8, 0, false, false) }, incoming, 0).side).toBe('forehand');
+      expect(aimView({ ...p, racketHead: racketHeadFor(p, -0.8, 0, false, false) }, incoming, 0).side).toBe('backhand');
+    }
+  });
+
+  it('gives a target only for an incoming shuttle, and onTarget once the racket is on it', () => {
+    const p = createPlayer(stats, 'near', { x: 0, y: 0, z: 3.5 });
+    const away = aimView(p, { ...incoming, vel: { ...incoming.vel, z: -14 } }, 0.7);
+    expect(away.target).toBeNull();
+    expect(away.onTarget).toBe(false);
+    const target = aimView(p, incoming, 0.7).target!;
+    expect(target).not.toBeNull();
+    const r = racketInputFor(p, target);
+    const on = { ...p, racketHead: racketHeadFor(p, r.x, r.y, false, false) };
+    expect(aimView(on, incoming, 0.7).onTarget).toBe(true);
+    const off = { ...p, racketHead: racketHeadFor(p, -r.x || 1, -r.y || -1, false, false) };
+    expect(aimView(off, incoming, 0).onTarget).toBe(false);
+  });
+});
 
 describe('assist', () => {
   it('racketInputFor round-trips to within 5 cm for reachable targets', () => {

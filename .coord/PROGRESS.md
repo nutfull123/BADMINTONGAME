@@ -2,6 +2,10 @@
 
 ## In progress
 <!-- - [agent] task — files owned — started YYYY-MM-DD -->
+- [agy] D1 doubles rules — src/rules/** — 2026-11-20
+- [sonnet] D2 2v2 rally + match wiring — src/game/** — 2026-11-20
+- [sonnet] D3 doubles bot — src/sim/bot.ts, src/sim/bot.test.ts — 2026-11-20
+- [sonnet] D4 render + ui (4 players, gender, events) — src/render/**, src/ui/** — 2026-11-20
 
 ## Done
 - [all] Demo v1 complete: rules (opencode), physics/render/input/sim/game (Sonnet), ui/bot (agy), tutorial (opencode + Sonnet); every branch cross-reviewed; final Opus gate APPROVE — main e7911f7 — 2026-11-20

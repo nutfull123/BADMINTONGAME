@@ -3,6 +3,7 @@
 import type { HitResult, Intent, PlayerAction, PlayerState, ShotType, ShuttleState, Side, Stats, Vec3 } from '../types';
 import { COURT, predictLanding } from '../physics';
 import { launchShuttle } from './shots';
+import type { FootworkView } from './footwork';
 import * as T from './tuning';
 
 export { STAT_BUDGET } from './tuning';
@@ -28,9 +29,20 @@ export interface SimPlayer extends PlayerState {
   diveT?: number;
   diveDir?: { x: number; z: number };
   diveSwung?: boolean;
+  // footwork (see footwork.ts): view for render plus the timers behind it
+  fw?: FootworkView;
+  fwCycle?: number;      // 0..1 chasse/crossover step cycle
+  fwIncoming?: boolean;  // the shuttle was heading at this player last frame
+  splitT?: number;       // s of split hop left
+  splitDur?: number;     // length of the current hop
+  boostT?: number;       // s of reaction boost left
+  lungeT?: number;       // s of lunge delay left (no movement)
+  lungeDur?: number;     // length of the current lunge delay
+  recoverT?: number;     // s of "recover" label left after a swing
 }
 interface Contact { d: number; pos: Vec3; flick: { x: number; y: number }; rx: number }
 interface Swing {
+  lungeBest?: Contact | null;          // closest approach of the lunge-extended racket, used only if the normal reach misses
   t: number;                           // seconds since release
   shot: ShotType;
   charge: number;                      // 0..1, fixed at release
@@ -92,6 +104,8 @@ export function recoverBetweenPoints(p: PlayerState, at: Vec3): PlayerState {
     staminaNow: Math.min(1, p.staminaNow + T.BETWEEN_POINTS_STAMINA),
     fatigue: Math.max(0, p.fatigue - T.BETWEEN_POINTS_FATIGUE),
     swing: null, swingCooldown: 0, diveT: 0, diveSwung: false,
+    fw: { kind: 'none', phase: 0, dir: { x: 0, z: -sgnOf(p.side) } }, fwIncoming: false,
+    splitT: 0, boostT: 0, lungeT: 0, recoverT: 0,
   };
   q.racketHead = racketHeadFor(q, 0, 0, false, false);
   return q;
@@ -113,6 +127,7 @@ export function stepPlayer(
     p.staminaNow = clamp(p.staminaNow + regenPerSecond(stats, p.fatigue) * dt, 0, 1);
     p.fatigue = clamp(p.fatigue - T.FATIGUE_DECAY * dt, 0, 1);
     p.swing = null;
+    p.fw = { kind: 'none', phase: 0, dir: { x: 0, z: -sgn } };
     p.racketHead = { x: p.pos.x, y: T.DOWN_RACKET_Y, z: p.pos.z };
     return { player: p, hit: null };
   }
@@ -128,6 +143,18 @@ export function stepPlayer(
   let diveT = p.diveT ?? 0;
   let diveDir = p.diveDir ?? { x: 0, z: 0 };
   let diveSwung = p.diveSwung ?? false;
+  const hadSwing = !!p.swing;
+  const recMul = 1 + ((T.STAT_MAX / 2 - stats.recovery) / (T.STAT_MAX / 2)) * T.FOOTWORK_RECOVERY_SPAN;
+  let splitDur = p.splitDur ?? 0;
+  let splitT = p.splitT ?? 0;
+  let boostT = Math.max(0, (p.boostT ?? 0) - dt);
+  let lungeT = Math.max(0, (p.lungeT ?? 0) - dt);
+  let lungeDur = p.lungeDur ?? 0;
+  let recoverT = Math.max(0, (p.recoverT ?? 0) - dt);
+  if (splitT > 0) { // landing inside the window after the opponent's contact earns the reaction boost
+    splitT = Math.max(0, splitT - dt);
+    if (splitT === 0 && splitDur <= T.SPLIT_WINDOW) boostT = T.SPLIT_BOOST_TIME;
+  }
 
   let mx = clamp(intent.move.x, -1, 1), mz = clamp(intent.move.z, -1, 1);
   const mlen = Math.hypot(mx, mz);
@@ -150,6 +177,14 @@ export function stepPlayer(
     stamina -= T.DIVE_COST * cost;
   }
   const diving = diveT > 0;
+
+  // ----- split step: a new shot heading at this player starts an automatic hop (not if already running or airborne) -----
+  const incomingNow = sgn * shuttle.vel.z > T.SPLIT_INCOMING_SPEED;
+  if (incomingNow && !p.fwIncoming && grounded && !diving && !swing && lungeT <= 0 &&
+    Math.hypot(vel.x, vel.z) <= T.SPLIT_MAX_SPEED) {
+    splitDur = T.SPLIT_HOP_TIME * recMul;
+    splitT = splitDur;
+  }
 
   // ----- jump: charge sets the height; takes off when Space is released -----
   if (intent.jumpRelease && grounded && !diving && stamina > 0) {
@@ -176,9 +211,13 @@ export function stepPlayer(
     const tiredMul = lerp(T.LOW_STAMINA_SPEED, 1, clamp(stamina / T.LOW_STAMINA, 0, 1));
     const top = T.BASE_TOP_SPEED * speedMul * T.BODY_SPEED[stats.body] * tiredMul *
       (1 - T.FATIGUE_SPEED_LOSS * fatigue) * (charging ? T.CHARGE_MOVE_FACTOR : 1);
-    const accel = T.BASE_ACCEL * speedMul * T.BODY_ACCEL[stats.body] * (grounded ? 1 : T.AIR_CONTROL);
+    const accel = T.BASE_ACCEL * speedMul * T.BODY_ACCEL[stats.body] * (grounded ? 1 : T.AIR_CONTROL) *
+      (boostT > 0 ? T.SPLIT_BOOST_ACCEL : 1);
     const turnAccel = accel * T.BODY_TURN[stats.body];
-    let dvx = mx * top - vel.x, dvz = mz * top - vel.z;
+    const frozen = lungeT > 0; // a lunge leaves the player stuck for a moment
+    const crossing = sgn * vel.z > T.CROSSOVER_MIN_SPEED && mz * sgn > 0; // crossover steps run a little faster backward
+    const tx = frozen ? 0 : mx, tz = frozen ? 0 : mz * (crossing ? T.CROSSOVER_SPEED_MUL : 1);
+    let dvx = tx * top - vel.x, dvz = tz * top - vel.z;
     const sp = Math.hypot(vel.x, vel.z);
     if (sp > 0.5) {
       // speeding up/braking along the current heading uses accel; changing heading is slower for heavy bodies
@@ -247,6 +286,14 @@ export function stepPlayer(
     const prev = { x: shuttle.pos.x - shuttle.vel.x * dt, y: shuttle.pos.y - shuttle.vel.y * dt, z: shuttle.pos.z - shuttle.vel.z * dt };
     const { d, point } = nearest(p.racketHead, prev, shuttle.pos);
     const radius = T.HIT_RADIUS_BASE + clamp(assist, 0, 1) * T.HIT_RADIUS_ASSIST + (diving ? T.DIVE_RADIUS_BONUS : 0);
+    // lunge: running at the net, a racket that reaches further forward may catch what the normal reach misses
+    const lungeHead: Vec3 = { ...p.racketHead, z: p.racketHead.z - sgn * T.LUNGE_REACH * (T.HEIGHT[stats.body] / T.HEIGHT.balanced) };
+    if (!diving && -sgn * vel.z > T.LUNGE_MIN_SPEED) {
+      const l = nearest(lungeHead, prev, shuttle.pos);
+      if (l.d <= radius && (!swing.lungeBest || l.d < swing.lungeBest.d)) {
+        swing.lungeBest = { d: l.d, pos: l.point, flick: { ...intent.racketVel }, rx: intent.racket.x };
+      }
+    }
     let resolve = false;
     if (d <= radius) {
       // contact is the closest approach: keep the best frame and resolve once the shuttle starts moving away
@@ -256,6 +303,12 @@ export function stepPlayer(
     swing.t += dt;
     if (swing.t >= T.SWING_WINDOW) resolve = true;
     if (resolve) {
+      if (!swing.best && swing.lungeBest) { // only the lunge reached it: take the hit, pay the recovery delay
+        swing.best = swing.lungeBest;
+        lungeDur = T.SWING_WINDOW + T.LUNGE_RECOVERY * recMul;
+        lungeT = lungeDur;
+        p.racketHead = lungeHead;
+      }
       if (swing.best) hit = makeHit(p, swing, swing.best);
       swing = null;
     }
@@ -273,6 +326,37 @@ export function stepPlayer(
     p.vel = { x: 0, y: 0, z: 0 };
     swing = null;
   }
+  if (hadSwing && !swing) recoverT = T.RECOVER_TIME;
+
+  // ----- footwork label for animation: lunge > split > chasse/crossover > recover -----
+  const spd = Math.hypot(p.vel.x, p.vel.z);
+  let kind: FootworkView['kind'] = 'none';
+  let phase = 0;
+  let cycle = p.fwCycle ?? 0;
+  if (action === 'diving' || action === 'down') { /* no footwork while diving or down */ }
+  else if (lungeT > 0) { kind = 'lunge'; phase = 1 - lungeT / lungeDur; }
+  else if (splitT > 0) { kind = 'split'; phase = 1 - splitT / splitDur; }
+  else if (spd > T.FOOTWORK_MIN_SPEED) {
+    if (sgn * p.vel.z > T.CROSSOVER_MIN_SPEED) kind = 'crossover';
+    else if (spd <= T.CHASSE_MAX_SPEED && Math.abs(p.vel.x) / spd >= T.CHASSE_SIDEWAYS) kind = 'chasse';
+    if (kind !== 'none') { cycle = (cycle + (spd * dt) / T.CHASSE_STEP_LENGTH) % 1; phase = cycle; }
+  }
+  if (kind === 'none' && recoverT > 0 && mlen < T.MOVE_DEADZONE && action !== 'down') {
+    kind = 'recover'; phase = 1 - recoverT / T.RECOVER_TIME;
+  }
+  const home = { x: 0 - pos.x, z: sgn * T.ASSIST_HOME_DEPTH - pos.z };
+  const aim = kind === 'recover' ? home : spd > 0.3 ? p.vel : { x: 0, z: -sgn };
+  const aimLen = Math.hypot(aim.x, aim.z) || 1;
+  p.fw = { kind, phase: clamp(phase, 0, 1), dir: { x: aim.x / aimLen, z: aim.z / aimLen } };
+  p.fwCycle = cycle;
+  p.fwIncoming = incomingNow;
+  p.splitT = splitT;
+  p.splitDur = splitDur;
+  p.boostT = boostT;
+  p.lungeT = lungeT;
+  p.lungeDur = lungeDur;
+  p.recoverT = recoverT;
+
   p.action = action;
   p.swing = swing;
   p.swingCooldown = cooldown;

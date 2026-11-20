@@ -10,6 +10,7 @@ export interface Settings {
   timingRing: boolean;      // default true
   format: '3x15' | '3x21';  // default '3x15'
   botLevel: 'easy' | 'medium' | 'hard'; // default 'medium'
+  mode: 'easy' | 'normal' | 'pro' | 'timing'; // demo assist mode, default 'easy'
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -18,6 +19,14 @@ export const DEFAULT_SETTINGS: Settings = {
   timingRing: true,
   format: '3x15',
   botLevel: 'medium',
+  mode: 'easy',
+};
+
+const MODE_DESC: Record<Settings['mode'], string> = {
+  easy: 'ไม้ตีอัตโนมัติ + WASD ช่วยดึงไปจุดตก + เกมช้าลง 0.75x',
+  normal: 'ไม้ตีอัตโนมัติ + เดินเองด้วย WASD',
+  pro: 'คุมไม้ด้วยเมาส์เอง + เดินด้วย WASD (แบบเดิม)',
+  timing: 'เดินและไม้อัตโนมัติทั้งหมด แค่กดจังหวะตี (WASD ไม่ทำงาน)',
 };
 
 export const PRESETS: Record<BodyType, Stats> = {
@@ -615,7 +624,33 @@ export function showSetup(
     },
   );
 
-  settingsGrid.append(assistRow, formatRow, botRow, landingRow, ringRow);
+  // Demo mode: auto racket / move assist / game speed. All four are described; the chosen one is bold.
+  const MODES: Array<{ value: Settings['mode']; label: string }> = [
+    { value: 'easy', label: 'A-ง่าย' },
+    { value: 'normal', label: 'A-ปกติ' },
+    { value: 'pro', label: 'A-โปร (= C)' },
+    { value: 'timing', label: 'B กดจังหวะ' },
+  ];
+  const modeRow = buildChipSetting<Settings['mode']>(
+    'โหมดการเล่น (Mode)', MODES, currentSettings.mode,
+    (v) => {
+      currentSettings.mode = v;
+      descLines.forEach((line, k) => { line.style.fontWeight = MODES[k].value === v ? '700' : '400'; });
+    },
+  );
+  modeRow.style.gridColumn = '1 / -1';
+  const modeDesc = document.createElement('div');
+  modeDesc.className = 'bm-slider-val';
+  const descLines = MODES.map((m) => {
+    const line = document.createElement('div');
+    line.textContent = `${m.label}: ${MODE_DESC[m.value]}`;
+    line.style.fontWeight = m.value === currentSettings.mode ? '700' : '400';
+    modeDesc.appendChild(line);
+    return line;
+  });
+  modeRow.appendChild(modeDesc);
+
+  settingsGrid.append(modeRow, assistRow, formatRow, botRow, landingRow, ringRow);
 
   // Start button
   const footer = document.createElement('div');

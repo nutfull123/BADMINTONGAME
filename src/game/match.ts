@@ -3,7 +3,9 @@ import { createInput } from '../input';
 import { createRenderer } from '../render';
 import { FORMAT_3X15, FORMAT_3X21, awardRally, createMatch } from '../rules';
 import { chargeLevel, createPlayer, validateStats } from '../sim';
+import { applyAssist } from '../sim/assist';
 import { botIntent, createBot } from '../sim/bot';
+import { ASSIST_GAME_SPEED } from '../sim/tuning';
 import { createHud, PRESETS, showResult, type Settings } from '../ui';
 import type { BodyType, Intent, MatchState, PlayerState, Stats, WorldView } from '../types';
 import { predictLanding } from '../physics';
@@ -24,6 +26,7 @@ const dropEdges = (i: Intent): Intent => ({ ...i, release: null, basicSwing: nul
 export function startMatch(root: HTMLElement, setup: MatchSetup, onAgain: () => void, notice: string | null = null): void {
   const { settings } = setup;
   const assist = settings.hitAssist / 100;
+  const speed = ASSIST_GAME_SPEED[settings.mode];
   const humanStats = validateStats(setup.stats) === null ? setup.stats : PRESETS.balanced;
   const bodies = Object.keys(PRESETS) as BodyType[];
   const botStats = PRESETS[bodies[Math.floor(Math.random() * bodies.length)]];
@@ -88,7 +91,8 @@ export function startMatch(root: HTMLElement, setup: MatchSetup, onAgain: () => 
     }
     const serving = rally.stage === 'serve' && rally.server === 'far';
     stepRally(rally, {
-      near: rally.stage === 'serve' && rally.server === 'near' ? aimServe(i, rally.near) : i,
+      near: rally.stage === 'serve' && rally.server === 'near'
+        ? aimServe(i, rally.near) : applyAssist(i, rally.near, rally.shuttle, settings.mode),
       far: botIntent(bot, rally.far, rally.near, rally.shuttle, STEP, serving),
     }, STEP, assist);
     if (rally.result) endRally(rally.result.winner, rally.result.reason);
@@ -113,13 +117,13 @@ export function startMatch(root: HTMLElement, setup: MatchSetup, onAgain: () => 
     raf = requestAnimationFrame(frame);
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
-    if (paused) acc = 0; else acc += dt;
+    if (paused) acc = 0; else acc += dt * speed;
     const n = Math.floor(acc / STEP + 1e-9);
     acc -= n * STEP;
     if (n > 0) {
       input.setServing(phase === 'between' ? match.server === 'near' : rally.stage === 'serve' && rally.server === 'near');
       // one input read per frame: edges go to the first tick only, the flick velocity spans all of them
-      human = input.intent(n * STEP);
+      human = input.intent((n * STEP) / speed); // flick speed is per real second
       for (let k = 0; k < n && !done; k++) tick(k === 0 ? human : dropEdges(human));
     }
     if (done) return;

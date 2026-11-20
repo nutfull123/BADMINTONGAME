@@ -1,5 +1,5 @@
 import type { Intent, PlayerState, ShotType, ShuttleState, Side, Vec3 } from '../types';
-import { predictLanding } from '../physics';
+import { COURT, predictLanding } from '../physics';
 import * as T from './tuning';
 
 export type BotLevel = 'easy' | 'medium' | 'hard';
@@ -13,7 +13,13 @@ export const BOT_TUNING = {
   netShotDepth: 2.1,            // m depth from net considered near the net
   netShotMaxY: 1.75,            // m max shuttle height for a net shot
   serveChargeDuration: 0.45,    // s bot holds serve charge before releasing
-  serveFlickSpeed: 1.6,         // racketVel.x magnitude to aim cross-court into diagonal service box
+  serveFlickSpeed: 1.6,         // fallback racketVel.x magnitude to aim cross-court into diagonal service box
+  serveTargetBoxX: 0.9,         // m lateral target inside receiver's diagonal service box
+  shortServeChance: 0.65,       // probability of picking serveShort over serveLong
+  dropBasicSplit: 0.5,          // probability of picking drop over basic on mid-court shots
+  arriveThreshold: 0.08,        // m distance below which bot stops moving
+  slowDownRadius: 0.5,          // m distance inside which move vector scales down smoothly
+  velEpsilon: 1e-4,             // m/s threshold below which velocity / speed counts as zero (dead shuttle)
   missRacketOffset: 1.8,        // racket offset when bot rolls a miss (aims off target)
   easy: {
     reactionDelay: 0.45,
@@ -47,13 +53,13 @@ export interface Bot {
   willMiss: boolean;
   plannedShot: ShotType | null;
   chargeTime: number;
-  chargingShot: ShotType | null;
   hasReleasedThisRally: boolean;
   serveTimer: number;
   serveChoice: 'serveShort' | 'serveLong' | null;
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const sgnOf = (s: Side) => (s === 'near' ? 1 : -1);
 
 export function createBot(level: BotLevel, rng: () => number = Math.random): Bot {
@@ -66,7 +72,6 @@ export function createBot(level: BotLevel, rng: () => number = Math.random): Bot
     willMiss: false,
     plannedShot: null,
     chargeTime: 0,
-    chargingShot: null,
     hasReleasedThisRally: false,
     serveTimer: 0,
     serveChoice: null,
@@ -127,7 +132,30 @@ function chooseShotForSituation(
   }
 
   // Otherwise drop or basic
-  return bot.rng() < 0.5 ? 'drop' : 'basic';
+  return bot.rng() < BOT_TUNING.dropBasicSplit ? 'drop' : 'basic';
+}
+
+function computeServeFlickX(
+  me: PlayerState,
+  shuttle: ShuttleState,
+  serveChoice: 'serveShort' | 'serveLong',
+  chargeTime: number,
+): number {
+  const sgn = sgnOf(me.side);
+  const charge = clamp(chargeTime / T.CHARGE_FULL_TIME, 0, 1);
+  const targetDepth =
+    serveChoice === 'serveShort'
+      ? COURT.shortServiceLine + lerp(T.SERVE_SHORT_PAST_LINE_MIN, T.SERVE_SHORT_PAST_LINE_MAX, charge)
+      : COURT.halfLength - lerp(T.SERVE_LONG_FROM_LINE_MIN, T.SERVE_LONG_FROM_LINE_MAX, charge);
+  const forwardDist = Math.max(1, sgn * shuttle.pos.z + targetDepth);
+  const targetWorldXDir = me.pos.x >= 0 ? -1 : 1;
+  const targetWorldX = targetWorldXDir * BOT_TUNING.serveTargetBoxX;
+  const dx = targetWorldX - shuttle.pos.x;
+  const az = Math.atan2(sgn * dx, forwardDist);
+  const flickX = clamp(az / T.FLICK_MAX_ANGLE, -1, 1) * T.FLICK_FULL;
+  return Math.abs(flickX) > BOT_TUNING.velEpsilon
+    ? flickX
+    : sgn * targetWorldXDir * BOT_TUNING.serveFlickSpeed;
 }
 
 export function botIntent(
@@ -150,22 +178,19 @@ export function botIntent(
 
   // ---------- SERVING ----------
   if (serving) {
+    bot.lastVelZSign = 0;
+    bot.hasReleasedThisRally = false;
     if (!bot.serveChoice) {
       bot.serveChoice =
-        !cfg.allowAllShots || bot.rng() < 0.65 ? 'serveShort' : 'serveLong';
+        !cfg.allowAllShots || bot.rng() < BOT_TUNING.shortServeChance ? 'serveShort' : 'serveLong';
       bot.serveTimer = 0;
     }
     const aim = computeRacketAim(me, shuttle.pos, true);
     intent.racket = aim;
     bot.serveTimer += dt;
 
-    // Cross-court flick toward diagonal service box:
-    // If bot is standing on x > 0, diagonal box has x < 0, and vice versa.
-    // World target x sign is -Math.sign(me.pos.x || sgn). In local racket coordinates (sgn * worldX):
-    const targetWorldXDir = me.pos.x >= 0 ? -1 : 1;
-    const flickLocalX = sgn * targetWorldXDir * BOT_TUNING.serveFlickSpeed;
-
     if (bot.serveTimer >= BOT_TUNING.serveChargeDuration) {
+      const flickLocalX = computeServeFlickX(me, shuttle, bot.serveChoice, bot.serveTimer);
       intent.release = bot.serveChoice;
       intent.chargeTime = bot.serveTimer;
       intent.racketVel = { x: flickLocalX, y: 0 };
@@ -181,8 +206,17 @@ export function botIntent(
   bot.serveChoice = null;
   bot.serveTimer = 0;
 
-  // ---------- DETECT NEW HIT (velocity Z direction change) ----------
-  const velZSign = Math.abs(shuttle.vel.z) > 1e-4 ? Math.sign(shuttle.vel.z) : 0;
+  // ---------- DEAD SHUTTLE RESET & NEW-HIT DETECTION ----------
+  const speed = Math.hypot(shuttle.vel.x, shuttle.vel.y, shuttle.vel.z);
+  if (speed <= BOT_TUNING.velEpsilon) {
+    bot.lastVelZSign = 0;
+    bot.hasReleasedThisRally = false;
+    bot.cachedLanding = null;
+    bot.plannedShot = null;
+    bot.chargeTime = 0;
+  }
+
+  const velZSign = Math.abs(shuttle.vel.z) > BOT_TUNING.velEpsilon ? Math.sign(shuttle.vel.z) : 0;
   // Shuttle is coming toward `me` when sgn * shuttle.vel.z > 0
   const incoming = sgn * shuttle.vel.z > 0;
 
@@ -194,13 +228,11 @@ export function botIntent(
       bot.willMiss = bot.rng() < cfg.missChance;
       bot.plannedShot = chooseShotForSituation(bot, me, shuttle, bot.cachedLanding);
       bot.chargeTime = 0;
-      bot.chargingShot = null;
       bot.hasReleasedThisRally = false;
     } else {
       bot.cachedLanding = null;
       bot.plannedShot = null;
       bot.chargeTime = 0;
-      bot.chargingShot = null;
       bot.hasReleasedThisRally = false;
     }
   }
@@ -233,8 +265,8 @@ export function botIntent(
   const dx = moveTarget.x - me.pos.x;
   const dz = moveTarget.z - me.pos.z;
   const distToTarget = Math.hypot(dx, dz);
-  if (distToTarget > 0.08) {
-    const scale = Math.min(1, distToTarget / 0.5);
+  if (distToTarget > BOT_TUNING.arriveThreshold) {
+    const scale = Math.min(1, distToTarget / BOT_TUNING.slowDownRadius);
     intent.move = {
       x: clamp((dx / distToTarget) * scale, -1, 1),
       z: clamp((dz / distToTarget) * scale, -1, 1),
@@ -304,10 +336,8 @@ export function botIntent(
         intent.basicSwing = intent.racket.x >= 0 ? 'forehand' : 'backhand';
       }
       bot.hasReleasedThisRally = true;
-      bot.chargingShot = null;
       bot.chargeTime = 0;
     } else if (isChargeable && distToShuttle <= BOT_TUNING.chargeStartDist) {
-      bot.chargingShot = shot;
       bot.chargeTime += dt;
       intent.charging = shot;
       intent.chargeTime = bot.chargeTime;

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { createBot, botIntent, BOT_TUNING } from './bot';
-import { createPlayer, stepPlayer } from './index';
-import { predictLanding, stepShuttle } from '../physics';
-import type { ShotType, ShuttleState, Stats } from '../types';
+import { createPlayer, stepPlayer, setRandom } from './index';
+import { predictLanding, stepShuttle, isInServiceBox } from '../physics';
+import type { ServiceCourt, ShotType, ShuttleState, Stats } from '../types';
 
 const balancedStats: Stats = { body: 'balanced', speed: 5, power: 5, recovery: 5, stamina: 5 };
 
@@ -161,5 +161,78 @@ describe('bot AI', () => {
 
     expect(hitOccurred).toBe(true);
     expect(shuttle.vel.z).toBeGreaterThan(0); // returned back toward near side
+  });
+
+  it('does not freeze after swinging and missing when a new serve comes from the same direction after a dead shuttle', () => {
+    const bot = createBot('hard', () => 0.5);
+    const me = createPlayer(balancedStats, 'far', { x: 0, y: 0, z: -3.5 });
+    const opp = createPlayer(balancedStats, 'near', { x: 0, y: 0, z: 3.5 });
+
+    // Point 1: incoming shuttle toward far court (vel.z < 0), close enough that the bot releases a swing (and misses/rally ends)
+    const incoming1: ShuttleState = {
+      pos: { x: 0, y: 2.2, z: -3.1 },
+      vel: { x: 0, y: -1.0, z: -4.0 },
+    };
+    const firstSwing = botIntent(bot, me, opp, incoming1, 0.2, false);
+    expect(firstSwing.release !== null || firstSwing.basicSwing !== null || firstSwing.netShot).toBe(true);
+
+    // Point ends: shuttle is dead (speed ~ 0) between points
+    const deadShuttle: ShuttleState = {
+      pos: { x: 0.8, y: 1.0, z: 2.0 },
+      vel: { x: 0, y: 0, z: 0 },
+    };
+    botIntent(bot, me, opp, deadShuttle, 0.05, false);
+
+    // Point 2: opponent serves again from the same direction (vel.z < 0)
+    const incoming2: ShuttleState = {
+      pos: { x: 0.8, y: 2.2, z: 0.5 },
+      vel: { x: 0.4, y: 2.5, z: -9.0 },
+    };
+    const afterDelay = botIntent(bot, me, opp, incoming2, BOT_TUNING.hard.reactionDelay + 0.05, false);
+    expect(Math.hypot(afterDelay.move.x, afterDelay.move.z)).toBeGreaterThan(0);
+
+    // When the second shuttle reaches the racket head, the bot releases a swing again
+    const atRacket2: ShuttleState = {
+      pos: { x: 0, y: 2.2, z: -3.1 },
+      vel: { x: 0, y: -1.0, z: -4.0 },
+    };
+    const secondSwing = botIntent(bot, me, opp, atRacket2, 0.05, false);
+    expect(secondSwing.release !== null || secondSwing.basicSwing !== null || secondSwing.netShot).toBe(true);
+  });
+
+  it('bot serve launched via stepPlayer lands inside the receiver diagonal service box for both service courts', () => {
+    setRandom(() => 0.5);
+    const courts: ServiceCourt[] = ['right', 'left'];
+    for (const court of courts) {
+      for (const serveRoll of [0.1, 0.9]) {
+        // For far side: right service court is x < 0, left service court is x > 0
+        const serverX = court === 'right' ? -1.1 : 1.1;
+        const bot = createBot('medium', () => serveRoll);
+        let me = createPlayer(balancedStats, 'far', { x: serverX, y: 0, z: -2.4 });
+        const opp = createPlayer(balancedStats, 'near', { x: -serverX, y: 0, z: 3.0 });
+        const shuttleAtRacket: ShuttleState = {
+          pos: { x: serverX, y: 1.05, z: -1.9 },
+          vel: { x: 0, y: 0, z: 0 },
+        };
+
+        // Charge frame then release frame
+        const dt = 0.05;
+        let hitLaunch: ShuttleState | null = null;
+        for (let step = 0; step < 20; step++) {
+          const intent = botIntent(bot, me, opp, shuttleAtRacket, dt, true);
+          const res = stepPlayer(me, intent, shuttleAtRacket, dt, 1.0);
+          me = res.player;
+          if (res.hit) {
+            hitLaunch = res.hit.launch;
+            break;
+          }
+        }
+
+        expect(hitLaunch).not.toBeNull();
+        const landing = predictLanding(hitLaunch!);
+        expect(landing).not.toBeNull();
+        expect(isInServiceBox(landing!, 'near', court)).toBe(true);
+      }
+    }
   });
 });

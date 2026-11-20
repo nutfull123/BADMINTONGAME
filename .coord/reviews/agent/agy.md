@@ -1,17 +1,19 @@
-# Review of agent/agy (t5 ui) — reviewer: Sonnet (r5)
+# Review of agent/agy (t7 bot) — reviewer: Sonnet (r7), round 2
+
+Round 1 (b6d92ef): CHANGES — bot freeze after a point ended on its side, loose numbers outside BOT_TUNING, no diagonal-serve test, unused field.
 
 ## Standards
-- src/ui/index.ts:3 - JUDGEMENT - STAT_BUDGET redeclared in ui; should come from sim once merged (fix at t8 integration)
-- src/ui/index.ts:~600-680 - JUDGEMENT - duplicated DOM code for side boxes and bars
-- src/ui/index.ts:15-27 - JUDGEMENT - extra exports (PRESETS, DEFAULT_SETTINGS, clampStatToBudget, StatKey)
+- src/sim/bot.ts:161-168 - JUDGEMENT - botIntent has a 6th param `serving`; src/types.ts:112 comment lists 5 (callers must pass it)
 - HARD: none
 
 ## Spec
-- showResult uses match.completedGames; verify at integration that the final game is included
-- all other t5 items present
+1. freeze - FIXED (bot.ts:211-217 dead-shuttle reset, 181-182 serving reset; reviewer re-ran the reproduction for both sides and all 3 levels)
+2. numbers in BOT_TUNING - FIXED (bot.ts:19-24)
+3. diagonal serve test - FIXED (stepPlayer + predictLanding + isInServiceBox, both courts, short and long)
+4. Bot.chargingShot - removed
 
 ## Checks
-npx vitest run src/ui -> pass (4 tests)
+npx vitest run src/sim -> pass (56)
 npx tsc --noEmit -> pass
 
-APPROVE 9a7ec57
+APPROVE 28777cc

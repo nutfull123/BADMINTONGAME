@@ -1,20 +1,19 @@
-# Review of agent/agy (v1 visuals) — reviewer: Sonnet (xv1)
+# Review of agent/agy (f2 footwork render, camera, zoom) — reviewer: Sonnet (xf2)
 
 ## Standards
-- src/render/index.ts:267-269 - JUDGEMENT - torso ignores yaw while shoulders/shorts rotate
-- src/render/index.ts:231-410, pose.ts - JUDGEMENT - small per-frame object churn (no geometry allocation)
-- src/render/index.ts:405 - JUDGEMENT - dead expression `yaw + (sgn === -1 ? 0 : 0)`
-- src/render/index.ts:517-537 - JUDGEMENT - drop line / trail bounding sphere at origin; set frustumCulled = false
-- src/render/index.ts:303 - JUDGEMENT - swing pose relies on sim racketHead motion plus small torso twist
+- src/render/pose.ts:~58-75,~515 - JUDGEMENT - unrelated edits (removed comments, clamp helper)
+- src/render/index.ts:511 - JUDGEMENT - PerspectiveCamera(50) hardcoded; use CAM_FOV_DEG
+- src/render/pose.ts:~437-500 - JUDGEMENT - magic framing bounds
 - HARD: none
 
 ## Spec
-- humanoids, racket IK, action poses, 2.6x shuttlecock cork-first, trail, drop line, pulsing yellow marker, raised camera: all PASS
-- IK can leave up to ~0.1 m hand-handle gap at full reach (cosmetic)
+- split / chasse / crossover / lunge / recover poses: PASS (chasse symmetric, ignores dir — JUDGEMENT)
+- camera: all four baseline corners inside view at 16:9 and 16:10, camX in [-2.59, 2.59] (reviewer projected with real THREE)
+- setZoom: clamps 0.6..1.6, eased ~0.2 s
 
 ## Checks
-npx vitest run -> pass (121)
+npx vitest run -> pass (134)
 npx tsc --noEmit -> pass
 npx vite build -> pass
 
-APPROVE 55c7f06
+APPROVE b3733bb

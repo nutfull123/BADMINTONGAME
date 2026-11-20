@@ -1,5 +1,6 @@
 // Character management on a SaveData. Pure: every function returns a new SaveData.
 import type { Character, SaveData, Stats } from '../types';
+import { validateStats } from '../sim';
 import { STAT_BUDGET, STAT_MAX } from '../sim/tuning';
 
 const MAX_EARNED = 4 * STAT_MAX - STAT_BUDGET; // 20 earned points take every stat to 10
@@ -8,15 +9,15 @@ let counter = 0;
 export const newCharacterId = (): string => `c${Date.now().toString(36)}${(counter++).toString(36)}`;
 
 export const characterBudget = (c: Pick<Character, 'earnedPoints'>): number =>
-  STAT_BUDGET + Math.max(0, Math.min(MAX_EARNED, c.earnedPoints));
+  STAT_BUDGET + (Number.isFinite(c.earnedPoints) ? Math.max(0, Math.min(MAX_EARNED, c.earnedPoints)) : 0);
 
-const total = (s: Stats) => s.speed + s.power + s.recovery + s.stamina;
+// For forms: why a stat set is not allowed (unknown gender/body, a stat outside 0..10, over the budget), or null.
+export const statsError = (s: Stats, budget: number): string | null => validateStats(s, budget);
 
+// Backstop for the create/update functions; pages check statsError first and show the message.
 function checkStats(s: Stats, budget: number): void {
-  for (const k of ['speed', 'power', 'recovery', 'stamina'] as const) {
-    if (!Number.isFinite(s[k]) || s[k] < 0 || s[k] > STAT_MAX) throw new Error(`${k} must be 0..${STAT_MAX}`);
-  }
-  if (total(s) > budget) throw new Error(`stats total ${total(s)} is over the budget ${budget}`);
+  const err = statsError(s, budget);
+  if (err) throw new Error(err);
 }
 
 const cleanName = (name: string) => name.trim().slice(0, 24) || 'Player';

@@ -206,9 +206,15 @@ export interface SaveData {
 }
 
 // app/ must export:
-//   settings.ts: DEFAULT_GAME_SETTINGS, DEFAULT_KEYS, toMatchSettings(s: GameSettings): MatchSettings
-//   save.ts: interface StorageLike { getItem; setItem; removeItem }; loadSave(storage?): SaveData (never throws:
-//            missing or broken data gives defaults); writeSave(data, storage?): void; SAVE_KEY
-//   characters.ts: newCharacterId(); characterBudget(c): number; createCharacter(save, name, stats): SaveData;
-//            updateCharacter(save, id, patch: { name?; stats? }): SaveData (gender/body cannot change);
-//            deleteCharacter(save, id): SaveData; setActiveCharacter(save, id): SaveData; activeCharacter(save): Character | null
+//   settings.ts: DEFAULT_GAME_SETTINGS, DEFAULT_KEYS (both frozen: clone before editing), LIMITS (slider ranges),
+//            CAMERA_PRESETS, GRAPHICS_QUALITIES, sanitizeSettings(raw): GameSettings,
+//            rebindKey(keys, action, code): { keys; conflict: InputAction | null },
+//            toMatchSettings(s): MatchSettings (caller fits match.event to the character's gender first;
+//            camera, controls, graphics and racketAid are read from GameSettings by the game itself)
+//   save.ts: interface StorageLike { getItem; setItem }; loadSave(storage?): SaveData (never throws; validates
+//            every field of the untrusted saved data); writeSave(data, storage?): boolean; emptySave(); SAVE_KEY
+//   characters.ts: statsError(stats, budget): string | null; characterBudget(c): number (20 + earned, max 40);
+//            createCharacter(save, name, stats): SaveData; updateCharacter(save, id, { name?, stats? }): SaveData
+//            (gender/body cannot change); deleteCharacter; setActiveCharacter (unknown id: unchanged);
+//            activeCharacter(save): Character | null. create/update throw on invalid stats: check statsError first.
+// Camera offsets: height +1 = about 2 m higher, distance +1 = about 3 m farther than the preset (render decides).

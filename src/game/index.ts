@@ -1,12 +1,75 @@
-// Screens: title -> character setup -> match or tutorial -> result -> title.
-import { showSetup, showTitle } from '../ui';
+// App shell flow: Home -> Main menu -> (Create character if none) -> Play vs Bots / Tutorial / My Characters / Settings.
+import { activeCharacter } from '../app/characters';
+import { loadSave, writeSave } from '../app/save';
+import { toMatchSettings } from '../app/settings';
+import type { SaveData } from '../types';
+import {
+  showCharacters,
+  showHome,
+  showMainMenu,
+  showMatchSetup,
+  showSettingsPage,
+} from '../ui';
+import { fitEvent } from '../ui/events';
 import { startMatch } from './match';
 import { startTutorial } from './tutorial';
 
 export { runRally, STEP } from './rally';
 
 export function startGame(root: HTMLElement): void {
-  const again = () => startGame(root);
-  showTitle(root, (mode) =>
-    showSetup(root, (setup) => (mode === 'tutorial' ? startTutorial(root, setup, again) : startMatch(root, setup, again))));
+  let save: SaveData = loadSave();
+
+  const updateSave = (next: SaveData): boolean => {
+    save = next;
+    return writeSave(save);
+  };
+
+  const openMenu = (): void => {
+    save = loadSave();
+    const active = activeCharacter(save);
+    if (!active) {
+      openCharacters();
+      return;
+    }
+    showMainMenu(root, save, {
+      onPlayMatch: openMatchSetup,
+      onTutorial: launchTutorial,
+      onCharacters: openCharacters,
+      onSettings: openSettings,
+    });
+  };
+
+  const openMatchSetup = (): void => {
+    showMatchSetup(
+      root,
+      save,
+      updateSave,
+      (cfg) => startMatch(root, cfg, openMenu),
+      openMenu,
+    );
+  };
+
+  const launchTutorial = (): void => {
+    const active = activeCharacter(save);
+    if (!active) {
+      openCharacters();
+      return;
+    }
+    const fitted = fitEvent(save.settings.match.event, active.stats.gender);
+    const settings = toMatchSettings({
+      ...save.settings,
+      match: { ...save.settings.match, event: fitted },
+    });
+    startTutorial(root, { stats: { ...active.stats }, settings }, openMenu);
+  };
+
+  const openCharacters = (): void => {
+    showCharacters(root, save, updateSave, openMenu);
+  };
+
+  const openSettings = (): void => {
+    showSettingsPage(root, save, updateSave, openMenu);
+  };
+
+  showHome(root, openMenu);
 }

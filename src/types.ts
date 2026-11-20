@@ -147,3 +147,74 @@ export interface AimView {
   side: 'forehand' | 'backhand';
   onTarget: boolean;
 }
+
+// ---------- app/ (pure: settings, characters, local save). ui/ draws the pages, game/ applies them ----------
+
+// The flat settings a match or tutorial reads (built from GameSettings by app/settings toMatchSettings).
+export interface MatchSettings {
+  hitAssist: number;        // 0..100
+  landingMarker: boolean;
+  timingRing: boolean;
+  format: '3x15' | '3x21';
+  botLevel: 'easy' | 'medium' | 'hard';
+  mode: 'easy' | 'normal' | 'pro' | 'timing'; // assist mode
+  event: MatchEvent;        // must fit the character's gender
+}
+
+export type CameraPreset = 'behindLow' | 'behindHigh' | 'broadcast';
+export interface CameraSettings {
+  preset: CameraPreset;
+  height: number;   // -1..1 offset from the preset's camera height
+  distance: number; // -1..1 offset from the preset's distance (+ = farther)
+  zoom: number;     // 0.6..1.6 starting zoom
+  follow: boolean;  // follow the human sideways
+}
+
+export type InputAction =
+  | 'up' | 'down' | 'left' | 'right' | 'backhand' | 'forehand' | 'smash' | 'drop' | 'clear'
+  | 'jump' | 'dive' | 'net' | 'fullscreen' | 'zoomIn' | 'zoomOut';
+export type KeyBindings = Record<InputAction, string[]>; // KeyboardEvent.code values, or 'Mouse0' / 'Mouse2'
+
+export interface ControlSettings {
+  mouseSensitivity: number; // 0.25..3, 1 = default
+  keys: KeyBindings;
+}
+
+export type GraphicsQuality = 'low' | 'medium' | 'high';
+
+export interface GameSettings {
+  camera: CameraSettings;
+  controls: ControlSettings;
+  assists: { mode: MatchSettings['mode']; hitAssist: number; landingMarker: boolean; timingRing: boolean; racketAid: boolean };
+  graphics: { quality: GraphicsQuality };
+  match: { event: MatchEvent; format: MatchSettings['format']; botLevel: MatchSettings['botLevel'] };
+}
+
+export interface Character {
+  id: string;
+  name: string;
+  stats: Stats;        // gender and body fixed after creation
+  earnedPoints: number; // extra stat points from offline play (phase 4); budget = 20 + earnedPoints, max 40
+  createdAt: number;   // ms since epoch
+}
+
+export interface SaveData {
+  version: 1;
+  characters: Character[];
+  activeCharacterId: string | null;
+  settings: GameSettings;
+}
+
+// app/ must export:
+//   settings.ts: DEFAULT_GAME_SETTINGS, DEFAULT_KEYS (both frozen: clone before editing), LIMITS (slider ranges),
+//            CAMERA_PRESETS, GRAPHICS_QUALITIES, sanitizeSettings(raw): GameSettings,
+//            rebindKey(keys, action, code): { keys; conflict: InputAction | null },
+//            toMatchSettings(s): MatchSettings (caller fits match.event to the character's gender first;
+//            camera, controls, graphics and racketAid are read from GameSettings by the game itself)
+//   save.ts: interface StorageLike { getItem; setItem }; loadSave(storage?): SaveData (never throws; validates
+//            every field of the untrusted saved data); writeSave(data, storage?): boolean; emptySave(); SAVE_KEY
+//   characters.ts: statsError(stats, budget): string | null; characterBudget(c): number (20 + earned, max 40);
+//            createCharacter(save, name, stats): SaveData; updateCharacter(save, id, { name?, stats? }): SaveData
+//            (gender/body cannot change); deleteCharacter; setActiveCharacter (unknown id: unchanged);
+//            activeCharacter(save): Character | null. create/update throw on invalid stats: check statsError first.
+// Camera offsets: height +1 = about 2 m higher, distance +1 = about 3 m farther than the preset (render decides).

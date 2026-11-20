@@ -1,4 +1,4 @@
-import type { BodyType, Gender, MatchEvent, MatchState, Side, Stats } from '../types';
+import type { BodyType, Gender, MatchEvent, MatchSettings, MatchState, Side, Stats } from '../types';
 import { heightOf } from '../sim/tuning';
 import { EVENTS, eventsFor, fitEvent } from './events';
 
@@ -6,15 +6,8 @@ export const STAT_BUDGET = 20;
 
 export type StatKey = 'speed' | 'power' | 'recovery' | 'stamina';
 
-export interface Settings {
-  hitAssist: number;        // 0..100 (default 70)
-  landingMarker: boolean;   // default true
-  timingRing: boolean;      // default true
-  format: '3x15' | '3x21';  // default '3x15'
-  botLevel: 'easy' | 'medium' | 'hard'; // default 'medium'
-  mode: 'easy' | 'normal' | 'pro' | 'timing'; // demo assist mode, default 'easy'
-  event: MatchEvent; // default 'MS'; must fit the player's gender (MS/MD for men, WS/WD for women, XD for both)
-}
+// The flat settings a match reads; the full settings model lives in app/ (GameSettings).
+export type Settings = MatchSettings;
 
 export const DEFAULT_SETTINGS: Settings = {
   hitAssist: 70,

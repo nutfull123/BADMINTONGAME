@@ -13,14 +13,15 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const sgnOf = (s: Side) => (s === 'near' ? 1 : -1); // +1 when the player's right is +x and the net is at -z
 
-export function validateStats(s: Stats): string | null {
+// budget: STAT_BUDGET for a new character; app/ passes 20 + earned points for a grown one.
+export function validateStats(s: Stats, budget: number = T.STAT_BUDGET): string | null {
   if (!Object.hasOwn(T.HEIGHT, s.gender)) return `unknown gender "${s.gender}"`;
   if (!Object.hasOwn(T.HEIGHT[s.gender], s.body)) return `unknown body "${s.body}"`;
   for (const k of ['speed', 'power', 'recovery', 'stamina'] as const) {
     if (!Number.isFinite(s[k]) || s[k] < 0 || s[k] > T.STAT_MAX) return `${k} must be between 0 and ${T.STAT_MAX}`;
   }
   const total = s.speed + s.power + s.recovery + s.stamina;
-  return total > T.STAT_BUDGET ? `stats total ${total}, the budget is ${T.STAT_BUDGET}` : null;
+  return total > budget ? `stats total ${total}, the budget is ${budget}` : null;
 }
 
 // Hidden bookkeeping carried on the player between frames. Optional so a plain PlayerState still works.

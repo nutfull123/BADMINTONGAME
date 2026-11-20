@@ -2,15 +2,19 @@ import * as THREE from 'three';
 import type { PlayerState, Side, Vec3, WorldView } from '../types';
 import {
   BODY_HEIGHT,
+  clampZoom,
+  computeCameraFraming,
   computePlayerPose,
   computePulseScale,
   createTrailBuffer,
   pushTrailPoint,
   solveTwoBoneIK,
+  stepZoom,
 } from './pose';
 
 const HALF_L = 6.7, HALF_W_D = 3.05, HALF_W_S = 2.59, SHORT_SVC = 1.98, LONG_SVC_D = 5.94;
 const CAM_FOLLOW = 5; // lerp rate per second
+const CAM_FOV_DEG = 50;
 const LINE_W = 0.04;
 const CHARGE_SEGMENTS = 48;
 const TRAIL_MAX_POINTS = 24;
@@ -360,6 +364,8 @@ function updateHumanRig(rig: HumanRig, p: PlayerState, timeSeconds: number, asse
   const updateLeg = (
     sideSign: number,
     legPitch: number,
+    legRoll: number,
+    kneeBend: number,
     thighMesh: THREE.Mesh,
     shinMesh: THREE.Mesh,
     footMesh: THREE.Mesh,
@@ -369,6 +375,7 @@ function updateHumanRig(rig: HumanRig, p: PlayerState, timeSeconds: number, asse
       y: hipPos.y - h * 0.03,
       z: hipPos.z + rightZ * hipHalfW * sideSign,
     };
+    const latThigh = Math.sin(legRoll) * thighLen;
     const knee: Vec3 = pose.lyingFlat
       ? {
           x: hipJoint.x - fwdX * thighLen,
@@ -376,11 +383,12 @@ function updateHumanRig(rig: HumanRig, p: PlayerState, timeSeconds: number, asse
           z: hipJoint.z - fwdZ * thighLen,
         }
       : {
-          x: hipJoint.x + fwdX * Math.sin(legPitch) * thighLen + rightX * sideSign * 0.03,
-          y: Math.max(p.pos.y + 0.14, hipJoint.y - Math.cos(legPitch) * thighLen),
-          z: hipJoint.z + fwdZ * Math.sin(legPitch) * thighLen + rightZ * sideSign * 0.03,
+          x: hipJoint.x + fwdX * Math.sin(legPitch) * thighLen + rightX * latThigh,
+          y: Math.max(p.pos.y + 0.14, hipJoint.y - Math.cos(legPitch) * Math.cos(legRoll) * thighLen),
+          z: hipJoint.z + fwdZ * Math.sin(legPitch) * thighLen + rightZ * latThigh,
         };
-    const anklePitch = legPitch - pose.kneeBend;
+    const anklePitch = legPitch - kneeBend;
+    const latShin = Math.sin(legRoll) * shinLen;
     const ankle: Vec3 = pose.lyingFlat
       ? {
           x: knee.x - fwdX * shinLen,
@@ -388,9 +396,9 @@ function updateHumanRig(rig: HumanRig, p: PlayerState, timeSeconds: number, asse
           z: knee.z - fwdZ * shinLen,
         }
       : {
-          x: knee.x + fwdX * Math.sin(anklePitch) * shinLen,
-          y: Math.max(p.pos.y + 0.035, knee.y - Math.cos(anklePitch) * shinLen),
-          z: knee.z + fwdZ * Math.sin(anklePitch) * shinLen,
+          x: knee.x + fwdX * Math.sin(anklePitch) * shinLen + rightX * latShin,
+          y: Math.max(p.pos.y + 0.035, knee.y - Math.cos(anklePitch) * Math.cos(legRoll) * shinLen),
+          z: knee.z + fwdZ * Math.sin(anklePitch) * shinLen + rightZ * latShin,
         };
 
     placeLimbBetween(thighMesh, hipJoint, knee, h * 0.044);
@@ -405,8 +413,8 @@ function updateHumanRig(rig: HumanRig, p: PlayerState, timeSeconds: number, asse
     footMesh.rotation.set(0, yaw + (sgn === -1 ? 0 : 0), 0);
   };
 
-  updateLeg(-1, pose.leftLegPitch, rig.thighL, rig.shinL, rig.footL);
-  updateLeg(1, pose.rightLegPitch, rig.thighR, rig.shinR, rig.footR);
+  updateLeg(-1, pose.leftLegPitch, pose.leftLegRoll, pose.leftKneeBend, rig.thighL, rig.shinL, rig.footL);
+  updateLeg(1, pose.rightLegPitch, pose.rightLegRoll, pose.rightKneeBend, rig.thighR, rig.shinR, rig.footR);
 }
 
 function buildShuttleGroup(): THREE.Group {
@@ -571,6 +579,12 @@ export function createRenderer(container: HTMLElement) {
   let camX = 0;
   let elapsed = 0;
   let chargeShown = -1;
+  let targetZoom = 1;
+  let currentZoom = 1;
+
+  function setZoom(z: number) {
+    targetZoom = clampZoom(z);
+  }
 
   function resize() {
     const w = container.clientWidth || 1, h = container.clientHeight || 1;
@@ -596,11 +610,13 @@ export function createRenderer(container: HTMLElement) {
       updateHumanRig(rig, p, elapsed, humanAssets);
     }
 
-    // Elevated camera (y = 6, z = 10.5) looking at (camX, 0.8, -1.5) with smooth sideways follow
+    // Smooth camera follow + aspect/FOV-computed framing of both baselines & sidelines + zoom easing
     const near = view.players.find((p) => p.side === 'near');
     if (near) camX += (near.pos.x - camX) * (1 - Math.exp(-CAM_FOLLOW * dt));
-    camera.position.set(camX, 6, 10.5);
-    camera.lookAt(camX, 0.8, -1.5);
+    currentZoom = stepZoom(currentZoom, targetZoom, dt);
+    const framing = computeCameraFraming(camera.aspect, CAM_FOV_DEG, camX, currentZoom);
+    camera.position.set(framing.pos.x, framing.pos.y, framing.pos.z);
+    camera.lookAt(framing.lookAt.x, framing.lookAt.y, framing.lookAt.z);
 
     // Shuttle orientation (cork-first along velocity)
     const { pos, vel } = view.shuttle;
@@ -691,5 +707,5 @@ export function createRenderer(container: HTMLElement) {
     renderer.domElement.remove();
   }
 
-  return { render, resize, dispose };
+  return { render, resize, dispose, setZoom };
 }

@@ -6,7 +6,12 @@ import {
   createTrailBuffer,
   pushTrailPoint,
   computePulseScale,
+  computeCameraFraming,
+  projectPointToNdc,
+  stepZoom,
+  clampZoom,
 } from './pose';
+import type { FootworkView } from '../sim/footwork';
 import type { PlayerState } from '../types';
 
 function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
@@ -25,7 +30,7 @@ function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
   };
 }
 
-describe('pose & trail math (pure, no WebGL/DOM)', () => {
+describe('pose, footwork, camera framing & trail math (pure, no WebGL/DOM)', () => {
   it('maps body types to exact specification heights (tall 1.95, balanced 1.78, short 1.63)', () => {
     expect(BODY_HEIGHT.tall).toBe(1.95);
     expect(BODY_HEIGHT.balanced).toBe(1.78);
@@ -66,40 +71,162 @@ describe('pose & trail math (pure, no WebGL/DOM)', () => {
     expect(totalReach).toBeCloseTo(upperLen + forearmLen, 2);
   });
 
-  it('computes distinct pose parameters for idle, moving, charging, swinging, airborne, diving, and down', () => {
-    const idlePose = computePlayerPose(makePlayer({ action: 'idle' }), 0.5);
+  it('computes distinct pose parameters for idle, moving, charging, swinging, airborne, diving, and down (footwork none)', () => {
+    const noneFw: FootworkView = { kind: 'none', phase: 0, dir: { x: 0, z: 0 } };
+    const idlePose = computePlayerPose(makePlayer({ action: 'idle' }), 0.5, noneFw);
     const movingPose = computePlayerPose(
       makePlayer({ action: 'moving', vel: { x: 2.5, y: 0, z: -1.5 } }),
       0.25,
+      noneFw,
     );
-    const chargingPose = computePlayerPose(makePlayer({ action: 'charging' }), 0.5);
-    const swingingPose = computePlayerPose(makePlayer({ action: 'swinging' }), 0.5);
+    const chargingPose = computePlayerPose(makePlayer({ action: 'charging' }), 0.5, noneFw);
+    const swingingPose = computePlayerPose(makePlayer({ action: 'swinging' }), 0.5, noneFw);
     const airbornePose = computePlayerPose(
       makePlayer({ action: 'airborne', pos: { x: 0, y: 0.5, z: 3.5 } }),
       0.5,
+      noneFw,
     );
-    const divingPose = computePlayerPose(makePlayer({ action: 'diving' }), 0.5);
-    const downPose = computePlayerPose(makePlayer({ action: 'down' }), 0.5);
+    const divingPose = computePlayerPose(makePlayer({ action: 'diving' }), 0.5, noneFw);
+    const downPose = computePlayerPose(makePlayer({ action: 'down' }), 0.5, noneFw);
 
-    // Moving strides legs opposite each other
     expect(Math.abs(movingPose.leftLegPitch)).toBeGreaterThan(0.1);
     expect(Math.sign(movingPose.leftLegPitch)).toBe(-Math.sign(movingPose.rightLegPitch));
-
-    // Charging crouches hip lower than idle
     expect(chargingPose.hipYOffset).toBeLessThan(idlePose.hipYOffset);
-
-    // Swinging adds forward torso twist / swing arc compared to idle
     expect(swingingPose.torsoTwistY).not.toBe(idlePose.torsoTwistY);
-
-    // Airborne tucks legs
     expect(airbornePose.kneeBend).toBeGreaterThan(idlePose.kneeBend);
-
-    // Diving pitches torso forward strongly
     expect(divingPose.torsoPitchX).toBeGreaterThan(0.7);
-
-    // Down lies horizontal on the court
     expect(downPose.lyingFlat).toBe(true);
     expect(downPose.hipYOffset).toBeLessThan(-0.4);
+  });
+
+  describe('footwork kinds (split, chasse, crossover, lunge, recover, none)', () => {
+    const p = makePlayer({ action: 'moving' });
+
+    it('none: keeps standard action-based pose without lateral foot cross or lunge knee bend', () => {
+      const base = computePlayerPose(p, 0.4);
+      const explicitNone = computePlayerPose(p, 0.4, { kind: 'none', phase: 0.5, dir: { x: 0, z: -1 } });
+      expect(explicitNone).toEqual(base);
+    });
+
+    it('split: two-foot hop mid-phase and bent knees on landing', () => {
+      const idle = computePlayerPose(makePlayer({ action: 'idle' }), 0);
+      const midHop = computePlayerPose(p, 0, { kind: 'split', phase: 0.3, dir: { x: 0, z: 0 } });
+      const landing = computePlayerPose(p, 0, { kind: 'split', phase: 0.85, dir: { x: 0, z: 0 } });
+
+      // Hop lifts hips above landing crouch, and landing bends both knees deeply and widens stance
+      expect(midHop.hipYOffset).toBeGreaterThan(landing.hipYOffset);
+      expect(landing.leftKneeBend).toBeGreaterThan(idle.leftKneeBend + 0.25);
+      expect(landing.rightKneeBend).toBeGreaterThan(idle.rightKneeBend + 0.25);
+      expect(landing.leftLegRoll).toBeLessThan(0);
+      expect(landing.rightLegRoll).toBeGreaterThan(0);
+    });
+
+    it('chasse: side shuffle where feet come together then apart without ever crossing', () => {
+      const hipHalfW = BODY_HEIGHT.balanced * 0.068;
+      const legLen = BODY_HEIGHT.balanced * 0.47;
+      for (const ph of [0, 0.25, 0.5, 0.75, 1]) {
+        const pose = computePlayerPose(p, 0, { kind: 'chasse', phase: ph, dir: { x: 1, z: 0 } });
+        const leftFootX = -hipHalfW + Math.sin(pose.leftLegRoll) * legLen;
+        const rightFootX = hipHalfW + Math.sin(pose.rightLegRoll) * legLen;
+        // Left foot stays strictly left of right foot (never crosses)
+        expect(leftFootX).toBeLessThan(rightFootX);
+      }
+      const together = computePlayerPose(p, 0, { kind: 'chasse', phase: 0.5, dir: { x: 1, z: 0 } });
+      const apart = computePlayerPose(p, 0, { kind: 'chasse', phase: 0.0, dir: { x: 1, z: 0 } });
+      const spanTogether =
+        2 * hipHalfW + (Math.sin(together.rightLegRoll) - Math.sin(together.leftLegRoll)) * legLen;
+      const spanApart =
+        2 * hipHalfW + (Math.sin(apart.rightLegRoll) - Math.sin(apart.leftLegRoll)) * legLen;
+      expect(spanTogether).toBeLessThan(spanApart);
+    });
+
+    it('crossover: back foot crosses in front while moving backward', () => {
+      const pose = computePlayerPose(p, 0, { kind: 'crossover', phase: 0.5, dir: { x: 0.4, z: 1 } });
+      // Moving backward with crossover twists torso and crosses one leg laterally across the midline while pitching forward
+      expect(Math.abs(pose.torsoTwistY)).toBeGreaterThan(0.25);
+      expect(pose.leftLegPitch).toBeGreaterThan(0.3);
+      expect(pose.rightLegPitch).toBeLessThan(0);
+      // Left leg rolls inward (+X) across toward right leg
+      expect(pose.leftLegRoll).toBeGreaterThan(0.18);
+    });
+
+    it('lunge: long step with racket-side (right) foot forward, front knee bent ~90 deg, back leg extended, torso leaning forward', () => {
+      const pose = computePlayerPose(p, 0, { kind: 'lunge', phase: 0.7, dir: { x: 0.5, z: -1 } });
+      // Racket-side (right) leg steps strongly forward (+pitch), left leg trails behind (-pitch)
+      expect(pose.rightLegPitch).toBeGreaterThan(0.75);
+      expect(pose.leftLegPitch).toBeLessThan(-0.55);
+      // Front knee bent ~90 degrees (~1.3..1.6 rad), back knee nearly straight (<0.25 rad)
+      expect(pose.rightKneeBend).toBeGreaterThan(1.2);
+      expect(pose.leftKneeBend).toBeLessThan(0.25);
+      // Torso leans forward and hips drop low
+      expect(pose.torsoPitchX).toBeGreaterThan(0.35);
+      expect(pose.hipYOffset).toBeLessThan(-0.18);
+    });
+
+    it('recover: pushes back from the front foot toward base as phase progresses from 0 to 1', () => {
+      const start = computePlayerPose(p, 0, { kind: 'recover', phase: 0.1, dir: { x: -0.3, z: 1 } });
+      const end = computePlayerPose(p, 0, { kind: 'recover', phase: 0.9, dir: { x: -0.3, z: 1 } });
+      // Starts low with right leg still forward, rises back toward upright base stance by phase 0.9
+      expect(start.hipYOffset).toBeLessThan(end.hipYOffset);
+      expect(start.rightLegPitch).toBeGreaterThan(end.rightLegPitch);
+      expect(start.rightKneeBend).toBeGreaterThan(end.rightKneeBend);
+    });
+  });
+
+  describe('camera framing & zoom math', () => {
+    it('frames BOTH baselines (z = +6.7 and -6.7) and both sidelines (x = +-3.05) inside NDC [-1, 1] with margin at 16:9 and 16:10', () => {
+      const fovDeg = 50;
+      for (const aspect of [16 / 9, 16 / 10]) {
+        for (const camX of [0, 2.59, -2.59]) {
+          const cam = computeCameraFraming(aspect, fovDeg, camX, 1.0);
+          // Camera is behind the near player (z > 6.7) and elevated
+          expect(cam.pos.z).toBeGreaterThan(6.7);
+          expect(cam.pos.y).toBeGreaterThan(4.0);
+
+          // Check all 4 outer doubles court corners: (x = +-3.05, y = 0, z = +-6.7)
+          for (const x of [-3.05, 3.05]) {
+            for (const z of [-6.7, 6.7]) {
+              const ndc = projectPointToNdc({ x, y: 0, z }, cam, aspect, fovDeg);
+              expect(Math.abs(ndc.x)).toBeLessThanOrEqual(0.96);
+              expect(Math.abs(ndc.y)).toBeLessThanOrEqual(0.96);
+            }
+          }
+        }
+      }
+    });
+
+    it('clamps zoom to 0.6..1.6 and eases smoothly over ~0.2 s, moving camera closer when zoom > 1', () => {
+      expect(clampZoom(0.2)).toBeCloseTo(0.6);
+      expect(clampZoom(2.5)).toBeCloseTo(1.6);
+      expect(clampZoom(1.2)).toBeCloseTo(1.2);
+
+      let z = 1.0;
+      z = stepZoom(z, 1.5, 0.05);
+      expect(z).toBeGreaterThan(1.0);
+      expect(z).toBeLessThan(1.5);
+
+      // After 1 second of easing, reaches target
+      for (let i = 0; i < 20; i++) z = stepZoom(z, 1.5, 0.05);
+      expect(z).toBeCloseTo(1.5, 2);
+
+      const defaultCam = computeCameraFraming(16 / 9, 50, 0, 1.0);
+      const zoomedInCam = computeCameraFraming(16 / 9, 50, 0, 1.5);
+      const zoomedOutCam = computeCameraFraming(16 / 9, 50, 0, 0.7);
+      const distDefault = Math.hypot(
+        defaultCam.pos.y - defaultCam.lookAt.y,
+        defaultCam.pos.z - defaultCam.lookAt.z,
+      );
+      const distIn = Math.hypot(
+        zoomedInCam.pos.y - zoomedInCam.lookAt.y,
+        zoomedInCam.pos.z - zoomedInCam.lookAt.z,
+      );
+      const distOut = Math.hypot(
+        zoomedOutCam.pos.y - zoomedOutCam.lookAt.y,
+        zoomedOutCam.pos.z - zoomedOutCam.lookAt.z,
+      );
+      expect(distIn).toBeLessThan(distDefault);
+      expect(distOut).toBeGreaterThan(distDefault);
+    });
   });
 
   it('maintains a ~0.3 s shuttle trail buffer, pruning expired points and resetting on teleports', () => {
@@ -109,19 +236,17 @@ describe('pose & trail math (pure, no WebGL/DOM)', () => {
     pushTrailPoint(trail, { x: 0, y: 2.3, z: 1.0 }, 0.2);
     expect(trail.points.length).toBe(3);
 
-    // At t = 0.35, point at t = 0.0 is older than 0.3 s and gets pruned
     pushTrailPoint(trail, { x: 0, y: 2.4, z: 0.0 }, 0.35);
     expect(trail.points.length).toBe(3);
     expect(trail.points[0].t).toBeCloseTo(0.1);
 
-    // Huge jump (e.g., new rally serve placement) clears old trail so no streak crosses the court
     pushTrailPoint(trail, { x: 1.3, y: 1.0, z: 3.1 }, 0.36);
     expect(trail.points.length).toBe(1);
   });
 
   it('computes a smooth pulsing scale around 1.0 for the landing marker', () => {
     const s0 = computePulseScale(0);
-    const sPeak = computePulseScale(Math.PI / (2 * 6)); // sin(6 * t) = 1
+    const sPeak = computePulseScale(Math.PI / (2 * 6));
     expect(s0).toBeCloseTo(1.0, 2);
     expect(sPeak).toBeGreaterThan(1.08);
   });

@@ -1,11 +1,16 @@
 import * as THREE from 'three';
-import type { PlayerState, Side, Vec3, WorldView } from '../types';
+import type { PlayerState, Side, Slot, Vec3, WorldView } from '../types';
+import { heightOf } from '../sim/tuning';
 import {
-  BODY_HEIGHT,
+  MAX_RIGS,
   clampZoom,
   computeCameraFraming,
   computePlayerPose,
   computePulseScale,
+  followedPlayer,
+  proportionsOf,
+  rigVisibility,
+  teamColor,
   createTrailBuffer,
   pushTrailPoint,
   solveTwoBoneIK,
@@ -87,7 +92,9 @@ interface SharedHumanAssets {
   hairMat: THREE.MeshStandardMaterial;
   shortsMat: THREE.MeshStandardMaterial;
   shoeMat: THREE.MeshStandardMaterial;
-  shirtMat: Record<Side, THREE.MeshStandardMaterial>;
+  shirtMat: Record<Side, [THREE.MeshStandardMaterial, THREE.MeshStandardMaterial]>;
+  markerGeo: THREE.ConeGeometry;
+  markerMat: THREE.MeshBasicMaterial;
   frameMat: THREE.MeshStandardMaterial;
   stringsMat: THREE.MeshBasicMaterial;
   handleMat: THREE.MeshStandardMaterial;
@@ -109,9 +116,15 @@ function createSharedHumanAssets(): SharedHumanAssets {
     shortsMat: new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.75 }),
     shoeMat: new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.5 }),
     shirtMat: {
-      near: new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.55 }),
-      far: new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.55 }),
+      near: [teamColor('near', 0), teamColor('near', 1)].map(
+        (color) => new THREE.MeshStandardMaterial({ color, roughness: 0.55 }),
+      ) as [THREE.MeshStandardMaterial, THREE.MeshStandardMaterial],
+      far: [teamColor('far', 0), teamColor('far', 1)].map(
+        (color) => new THREE.MeshStandardMaterial({ color, roughness: 0.55 }),
+      ) as [THREE.MeshStandardMaterial, THREE.MeshStandardMaterial],
     },
+    markerGeo: new THREE.ConeGeometry(0.12, 0.24, 12).rotateX(Math.PI), // tip points down at the head
+    markerMat: new THREE.MeshBasicMaterial({ color: 0xff2bd6 }),
     frameMat: new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.3, metalness: 0.5 }),
     stringsMat: new THREE.MeshBasicMaterial({
       color: 0xffffff,
@@ -126,6 +139,9 @@ function createSharedHumanAssets(): SharedHumanAssets {
 
 interface HumanRig {
   side: Side;
+  slot: Slot;
+  ponytail: THREE.Mesh;
+  marker: THREE.Mesh;
   root: THREE.Group;
   torso: THREE.Mesh;
   shorts: THREE.Mesh;
@@ -146,12 +162,15 @@ interface HumanRig {
 
 function createHumanRig(side: Side, assets: SharedHumanAssets): HumanRig {
   const root = new THREE.Group();
-  const shirt = assets.shirtMat[side];
+  const shirt = assets.shirtMat[side][0];
 
   const torso = new THREE.Mesh(assets.torsoGeo, shirt);
   const shorts = new THREE.Mesh(assets.shortsGeo, assets.shortsMat);
   const head = new THREE.Mesh(assets.headGeo, assets.skinMat);
   const hair = new THREE.Mesh(assets.headGeo, assets.hairMat);
+  const ponytail = new THREE.Mesh(assets.headGeo, assets.hairMat);
+  const marker = new THREE.Mesh(assets.markerGeo, assets.markerMat);
+  ponytail.visible = marker.visible = false;
 
   const upperArmR = new THREE.Mesh(assets.limbGeo, shirt);
   const forearmR = new THREE.Mesh(assets.limbGeo, assets.skinMat);
@@ -182,6 +201,8 @@ function createHumanRig(side: Side, assets: SharedHumanAssets): HumanRig {
     shorts,
     head,
     hair,
+    ponytail,
+    marker,
     upperArmR,
     forearmR,
     upperArmL,
@@ -197,6 +218,9 @@ function createHumanRig(side: Side, assets: SharedHumanAssets): HumanRig {
 
   return {
     side,
+    slot: 0,
+    ponytail,
+    marker,
     root,
     torso,
     shorts,
@@ -232,16 +256,24 @@ function placeLimbBetween(mesh: THREE.Mesh, a: Vec3, b: Vec3, radius: number): v
   mesh.quaternion.setFromUnitVectors(upAxis, tmpDir);
 }
 
-function updateHumanRig(rig: HumanRig, p: PlayerState, timeSeconds: number, assets: SharedHumanAssets): void {
-  if (rig.side !== p.side) {
+function updateHumanRig(
+  rig: HumanRig,
+  p: PlayerState,
+  timeSeconds: number,
+  assets: SharedHumanAssets,
+  isHuman: boolean,
+): void {
+  if (rig.side !== p.side || rig.slot !== p.slot) {
     rig.side = p.side;
-    const shirt = assets.shirtMat[p.side];
+    rig.slot = p.slot;
+    const shirt = assets.shirtMat[p.side][p.slot];
     rig.torso.material = shirt;
     rig.upperArmR.material = shirt;
     rig.upperArmL.material = shirt;
   }
 
-  const h = BODY_HEIGHT[p.stats.body];
+  const h = heightOf(p.stats);
+  const prop = proportionsOf(p.stats.gender);
   const pose = computePlayerPose(p, timeSeconds);
   const sgn = p.side === 'near' ? 1 : -1;
 
@@ -269,11 +301,11 @@ function updateHumanRig(rig: HumanRig, p: PlayerState, timeSeconds: number, asse
 
   // Torso & shorts
   placeLimbBetween(rig.torso, hipPos, chestTop, 1);
-  rig.torso.scale.set(h * 0.21, torsoLen, h * 0.13);
+  rig.torso.scale.set(h * 0.21 * prop.torso, torsoLen, h * 0.13);
   rig.torso.rotation.y += pose.torsoTwistY * 0.35;
 
   rig.shorts.position.set(hipPos.x, hipPos.y - h * 0.03, hipPos.z);
-  rig.shorts.scale.set(h * 0.215, h * 0.11, h * 0.135);
+  rig.shorts.scale.set(h * 0.215 * prop.torso, h * 0.11, h * 0.135);
   rig.shorts.rotation.set(pose.torsoPitchX * 0.5, yaw, 0);
 
   // Head & hair cap
@@ -288,8 +320,19 @@ function updateHumanRig(rig: HumanRig, p: PlayerState, timeSeconds: number, asse
   rig.hair.position.set(headPos.x - fwdX * 0.01, headPos.y + headRadius * 0.22, headPos.z - fwdZ * 0.01);
   rig.hair.scale.set(headRadius * 1.04, headRadius * 0.85, headRadius * 1.06);
 
+  // Ponytail: an ellipsoid hanging behind the head (women only)
+  rig.ponytail.visible = prop.ponytail;
+  if (prop.ponytail) {
+    rig.ponytail.position.set(headPos.x - fwdX * headRadius * 1.15, headPos.y - headRadius * 0.7, headPos.z - fwdZ * headRadius * 1.15);
+    rig.ponytail.scale.set(headRadius * 0.3, headRadius * 1.1, headRadius * 0.3);
+  }
+
+  // Human marker: a bright cone bobbing above the head
+  rig.marker.visible = isHuman;
+  if (isHuman) rig.marker.position.set(headPos.x, headPos.y + headRadius + 0.3 + Math.sin(timeSeconds * 4) * 0.04, headPos.z);
+
   // Shoulders
-  const shoulderHalfW = h * 0.145;
+  const shoulderHalfW = h * prop.shoulder;
   const shoulderR: Vec3 = {
     x: chestTop.x + rightX * shoulderHalfW,
     y: chestTop.y - h * 0.025,
@@ -329,8 +372,8 @@ function updateHumanRig(rig: HumanRig, p: PlayerState, timeSeconds: number, asse
     z: rightZ * 0.35 - fwdZ * 0.25,
   };
   const ikR = solveTwoBoneIK(shoulderR, gripTarget, upperArmLen, forearmLen, poleHint);
-  placeLimbBetween(rig.upperArmR, shoulderR, ikR.elbow, h * 0.032);
-  placeLimbBetween(rig.forearmR, ikR.elbow, ikR.wrist, h * 0.026);
+  placeLimbBetween(rig.upperArmR, shoulderR, ikR.elbow, h * 0.032 * prop.limb);
+  placeLimbBetween(rig.forearmR, ikR.elbow, ikR.wrist, h * 0.026 * prop.limb);
 
   // Orient racket so its +Y axis points from wrist through p.racketHead and its head centre sits at p.racketHead
   rig.racketGroup.position.set(headWorld.x, headWorld.y, headWorld.z);
@@ -353,8 +396,8 @@ function updateHumanRig(rig: HumanRig, p: PlayerState, timeSeconds: number, asse
     y: elbowL.y - forearmLen * 0.45,
     z: elbowL.z - rightZ * 0.06 + fwdZ * (forearmLen * 0.75),
   };
-  placeLimbBetween(rig.upperArmL, shoulderL, elbowL, h * 0.031);
-  placeLimbBetween(rig.forearmL, elbowL, wristL, h * 0.025);
+  placeLimbBetween(rig.upperArmL, shoulderL, elbowL, h * 0.031 * prop.limb);
+  placeLimbBetween(rig.forearmL, elbowL, wristL, h * 0.025 * prop.limb);
 
   // Legs (left and right)
   const hipHalfW = h * 0.068;
@@ -401,8 +444,8 @@ function updateHumanRig(rig: HumanRig, p: PlayerState, timeSeconds: number, asse
           z: knee.z + fwdZ * Math.sin(anklePitch) * shinLen + rightZ * latShin,
         };
 
-    placeLimbBetween(thighMesh, hipJoint, knee, h * 0.044);
-    placeLimbBetween(shinMesh, knee, ankle, h * 0.033);
+    placeLimbBetween(thighMesh, hipJoint, knee, h * 0.044 * prop.limb);
+    placeLimbBetween(shinMesh, knee, ankle, h * 0.033 * prop.limb);
 
     footMesh.position.set(
       ankle.x + fwdX * 0.045,
@@ -599,10 +642,9 @@ export function createRenderer(container: HTMLElement) {
 
   // Pre-allocate two human player rigs once and reuse every frame
   const humanAssets = createSharedHumanAssets();
-  const rigs: HumanRig[] = [
-    createHumanRig('near', humanAssets),
-    createHumanRig('far', humanAssets),
-  ];
+  const rigs: HumanRig[] = Array.from({ length: MAX_RIGS }, (_, i) =>
+    createHumanRig(i % 2 === 0 ? 'near' : 'far', humanAssets),
+  );
   for (const rig of rigs) scene.add(rig.root);
 
   let camX = 0;
@@ -628,19 +670,15 @@ export function createRenderer(container: HTMLElement) {
     elapsed += Math.max(0, dt);
 
     // Update human player rigs
+    const shown = rigVisibility(view.players.length);
+    const near = followedPlayer(view.players, view.human);
     for (let i = 0; i < rigs.length; i++) {
       const p = view.players[i];
-      const rig = rigs[i];
-      if (!p) {
-        rig.root.visible = false;
-        continue;
-      }
-      rig.root.visible = true;
-      updateHumanRig(rig, p, elapsed, humanAssets);
+      rigs[i].root.visible = shown[i];
+      if (p) updateHumanRig(rigs[i], p, elapsed, humanAssets, p === near);
     }
 
     // Smooth camera follow + aspect/FOV-computed framing of both baselines & sidelines + zoom easing
-    const near = view.players.find((p) => p.side === 'near');
     if (near) camX += (near.pos.x - camX) * (1 - Math.exp(-CAM_FOLLOW * dt));
     currentZoom = stepZoom(currentZoom, targetZoom, dt);
     const framing = computeCameraFraming(camera.aspect, CAM_FOV_DEG, camX, currentZoom);

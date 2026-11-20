@@ -66,7 +66,7 @@ export function createPlayer(stats: Stats, side: Side, at: Vec3): PlayerState {
   return p;
 }
 
-function racketHeadFor(p: PlayerState, rx: number, ry: number, serve: boolean, diving: boolean): Vec3 {
+export function racketHeadFor(p: PlayerState, rx: number, ry: number, serve: boolean, diving: boolean): Vec3 {
   const h = T.HEIGHT[p.stats.body];
   const lateral = T.REACH_LATERAL_BASE + T.REACH_LATERAL_PER_M * (h - T.HEIGHT.balanced);
   const top = h * T.RACKET_TOP_FACTOR + T.RACKET_TOP_OFFSET;

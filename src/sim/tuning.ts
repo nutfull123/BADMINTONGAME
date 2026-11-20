@@ -137,3 +137,14 @@ export const SOLVE_TOLERANCE = 0.25; // m landing error the solver accepts
 export const SOLVE_ITERATIONS = 20; // bisection steps per search
 export const ANGLE_SEARCH_MIN_DEG = -85; // steepest downward angle the smash/kill solver tries
 export const ANGLE_SEARCH_MAX_DEG = 60; // steepest upward angle the smash/kill solver tries (low contacts must still clear the net)
+
+// ---------- assist modes (sim/assist.ts, game/) ----------
+export const ASSIST_PULL = 0.5; // easy mode: strength (0..1) of the pull toward the predicted landing spot, added to WASD
+export const ASSIST_GAME_SPEED: Record<'easy' | 'normal' | 'pro' | 'timing', number> = {
+  easy: 0.75, normal: 1, pro: 1, timing: 1,
+}; // simulation time per real second
+export const ASSIST_LOOKAHEAD = 2.5; // s the auto racket looks ahead along the shuttle flight
+export const ASSIST_LOOKAHEAD_STEP = 1 / 60; // s per look-ahead step (coarse on purpose: cheap)
+export const ASSIST_SLOW_RADIUS = 0.3; // m from the target inside which assisted movement eases off
+export const ASSIST_HOME_DEPTH = 3.2; // m behind the net where timing mode parks the player between shots
+export const ASSIST_INCOMING_SPEED = 0.5; // m/s of shuttle speed toward the player that counts as an incoming shot

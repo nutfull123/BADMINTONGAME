@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { isInSingles, predictLanding } from '../physics';
 import { createPlayer, setRandom } from '../sim';
-import { launchShuttle } from '../sim/shots';
-import type { HitResult, ShotType, Stats, Vec3 } from '../types';
+import type { HitResult, ShotType, Stats } from '../types';
 import { DRILL_IDS, SUCCESSES_TO_PASS, createTutorial, type Attempt, type DrillId } from './index';
 
 const stats: Stats = { body: 'balanced', speed: 5, power: 5, recovery: 5, stamina: 5 };
@@ -159,7 +158,8 @@ describe('tutorial state machine', () => {
 });
 
 describe('tutorial feeder', () => {
-  it('feeds a shuttle toward the near court for every drill that needs one', () => {    setRandom(() => 0.5);
+  it('feeds a shuttle toward the near court for every drill that needs one', () => {
+    setRandom(() => 0.5);
     const player = createPlayer(stats, 'near', { x: 0, y: 0, z: 3.5 });
     const t = createTutorial();
 

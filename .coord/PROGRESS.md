@@ -2,6 +2,8 @@
 
 ## In progress
 <!-- - [agent] task — files owned — started YYYY-MM-DD -->
+- [agy] P2 app shell pages — src/ui/**, src/game/index.ts — 2026-11-20
+- [sonnet] P3 camera presets, graphics, key bindings — src/render/**, src/input/**, src/game/match.ts, src/game/tutorial.ts — 2026-11-20
 
 ## Done
 - [all] Phase 1 doubles + five events: contract (claude), D1 rules Law 11 (agy), D2 2v2 rally + teams (sonnet), D3 doubles bot (sonnet), D4 4 players + gender/event pickers (sonnet), L1 doubles long serve (claude), seeded bot tests (claude); every branch cross-reviewed — main cd49b27 — 2026-11-20

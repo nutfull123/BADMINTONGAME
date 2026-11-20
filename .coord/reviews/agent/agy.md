@@ -1,17 +1,16 @@
-# Review of agent/agy (t5 ui) — reviewer: Sonnet (r5)
+# Review of agent/agy (t7 bot, commit b6d92ef) — reviewer: Sonnet (r7)
 
 ## Standards
-- src/ui/index.ts:3 - JUDGEMENT - STAT_BUDGET redeclared in ui; should come from sim once merged (fix at t8 integration)
-- src/ui/index.ts:~600-680 - JUDGEMENT - duplicated DOM code for side boxes and bars
-- src/ui/index.ts:15-27 - JUDGEMENT - extra exports (PRESETS, DEFAULT_SETTINGS, clampStatToBudget, StatKey)
-- HARD: none
+- src/sim/bot.ts:103,150,189,222-224 - HARD (task rule) - loose numbers outside BOT_TUNING: 0.65 short-serve chance, 0.5 drop/basic split, 0.08 arrive threshold, 0.5 slow radius, 1e-4 vel epsilon
+- src/sim/bot.ts:77-85,262-268 - JUDGEMENT - racket reach formula duplicated from sim
+- src/sim/bot.ts:55,118 - JUDGEMENT - Bot.chargingShot written, never read
 
 ## Spec
-- showResult uses match.completedGames; verify at integration that the final game is included
-- all other t5 items present
+- src/sim/bot.ts:186-216 - BUG - bot freezes: new-hit detection only fires on a vel.z sign change; a dead shuttle and the serving branch never reset lastVelZSign / hasReleasedThisRally, so after a point that ended on the bot's side, a serve coming toward the bot is ignored (move 0,0, no swing). Reproduced by the reviewer.
+- src/sim/bot.ts:162-171 - PARTIAL - no test that the bot's serve lands in the diagonal service box
 
 ## Checks
-npx vitest run src/ui -> pass (4 tests)
+npx vitest run src/sim -> pass (54)
 npx tsc --noEmit -> pass
 
-APPROVE 9a7ec57
+CHANGES

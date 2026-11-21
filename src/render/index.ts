@@ -17,6 +17,8 @@ import {
   solveTwoBoneIK,
   stepZoom,
 } from './pose';
+import { createArena } from './arena';
+import { createRacketMesh, createShuttlecockMesh } from './equipment';
 
 const HALF_L = 6.7, HALF_W_D = 3.05, HALF_W_S = 2.59, SHORT_SVC = 1.98, LONG_SVC_D = 5.94;
 const CAM_FOLLOW = 5; // lerp rate per second
@@ -36,17 +38,6 @@ const basic = (color: number, opacity = 1) =>
   });
 
 function buildCourt(scene: THREE.Scene) {
-  const floor = new THREE.Mesh(
-    flat(new THREE.PlaneGeometry(46, 46)),
-    new THREE.MeshStandardMaterial({ color: 0x1b2620, roughness: 0.9 }),
-  );
-  floor.position.y = -0.01;
-  const court = new THREE.Mesh(
-    flat(new THREE.PlaneGeometry(HALF_W_D * 2 + 1.8, HALF_L * 2 + 1.8)),
-    new THREE.MeshStandardMaterial({ color: 0x266b49, roughness: 0.78 }),
-  );
-  scene.add(floor, court);
-
   const lineMat = basic(0xffffff);
   const line = (w: number, l: number, x: number, z: number) => {
     const m = new THREE.Mesh(flat(new THREE.PlaneGeometry(w, l)), lineMat);
@@ -72,11 +63,6 @@ function buildCourt(scene: THREE.Scene) {
     post.position.set(x, 0.775, 0);
     scene.add(post);
   }
-
-  scene.add(new THREE.HemisphereLight(0xf8fafc, 0x334155, 1.7));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.35);
-  sun.position.set(5, 12, 8);
-  scene.add(sun);
 }
 
 interface SharedHumanAssets {
@@ -85,10 +71,6 @@ interface SharedHumanAssets {
   torsoGeo: THREE.BoxGeometry;
   shortsGeo: THREE.BoxGeometry;
   footGeo: THREE.BoxGeometry;
-  racketFrameGeo: THREE.TorusGeometry;
-  racketStringsGeo: THREE.CircleGeometry;
-  racketShaftGeo: THREE.CylinderGeometry;
-  racketHandleGeo: THREE.CylinderGeometry;
   skinMat: THREE.MeshStandardMaterial;
   hairMat: THREE.MeshStandardMaterial;
   shortsMat: THREE.MeshStandardMaterial;
@@ -96,9 +78,6 @@ interface SharedHumanAssets {
   shirtMat: Record<Side, [THREE.MeshStandardMaterial, THREE.MeshStandardMaterial]>;
   markerGeo: THREE.ConeGeometry;
   markerMat: THREE.MeshBasicMaterial;
-  frameMat: THREE.MeshStandardMaterial;
-  stringsMat: THREE.MeshBasicMaterial;
-  handleMat: THREE.MeshStandardMaterial;
 }
 
 function createSharedHumanAssets(): SharedHumanAssets {
@@ -108,10 +87,6 @@ function createSharedHumanAssets(): SharedHumanAssets {
     torsoGeo: new THREE.BoxGeometry(1, 1, 1),
     shortsGeo: new THREE.BoxGeometry(1, 1, 1),
     footGeo: new THREE.BoxGeometry(1, 1, 1),
-    racketFrameGeo: new THREE.TorusGeometry(0.115, 0.011, 8, 24),
-    racketStringsGeo: new THREE.CircleGeometry(0.108, 16),
-    racketShaftGeo: new THREE.CylinderGeometry(0.006, 0.006, 0.24, 8),
-    racketHandleGeo: new THREE.CylinderGeometry(0.014, 0.013, 0.16, 10),
     skinMat: new THREE.MeshStandardMaterial({ color: 0xf1c27d, roughness: 0.65 }),
     hairMat: new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 }),
     shortsMat: new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.75 }),
@@ -126,15 +101,6 @@ function createSharedHumanAssets(): SharedHumanAssets {
     },
     markerGeo: new THREE.ConeGeometry(0.12, 0.24, 12).rotateX(Math.PI), // tip points down at the head
     markerMat: new THREE.MeshBasicMaterial({ color: 0xff2bd6 }),
-    frameMat: new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.3, metalness: 0.5 }),
-    stringsMat: new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 0.38,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    }),
-    handleMat: new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.8 }),
   };
 }
 
@@ -185,17 +151,8 @@ function createHumanRig(side: Side, assets: SharedHumanAssets): HumanRig {
   const shinR = new THREE.Mesh(assets.limbGeo, assets.skinMat);
   const footR = new THREE.Mesh(assets.footGeo, assets.shoeMat);
 
-  // Build racket group with origin at the centre of the racket head (racketHead)
-  const racketGroup = new THREE.Group();
-  const frame = new THREE.Mesh(assets.racketFrameGeo, assets.frameMat);
-  const strings = new THREE.Mesh(assets.racketStringsGeo, assets.stringsMat);
-  const shaft = new THREE.Mesh(assets.racketShaftGeo, assets.frameMat);
-  // Shaft extends along -Y from head rim (-0.115) down to -0.355
-  shaft.position.set(0, -0.235, 0);
-  const handle = new THREE.Mesh(assets.racketHandleGeo, assets.handleMat);
-  // Handle extends from -0.355 down to -0.515 (grip sits around -0.45)
-  handle.position.set(0, -0.435, 0);
-  racketGroup.add(frame, strings, shaft, handle);
+  // Racket group with origin at the centre of the racket head (racketHead)
+  const racketGroup = createRacketMesh();
 
   root.add(
     torso,
@@ -461,47 +418,6 @@ function updateHumanRig(
   updateLeg(1, pose.rightLegPitch, pose.rightLegRoll, pose.rightKneeBend, rig.thighR, rig.shinR, rig.footR);
 }
 
-function buildShuttleGroup(): THREE.Group {
-  // 2.5x real size shuttlecock: cork hemisphere pointing along +Y, conical feather skirt behind it (-Y)
-  const group = new THREE.Group();
-
-  const corkMat = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    roughness: 0.25,
-    emissive: 0x334155,
-    emissiveIntensity: 0.35,
-  });
-  const skirtMat = new THREE.MeshStandardMaterial({
-    color: 0xf8fafc,
-    roughness: 0.4,
-    emissive: 0x38bdf8,
-    emissiveIntensity: 0.22,
-    side: THREE.DoubleSide,
-  });
-  const bandMat = new THREE.MeshStandardMaterial({
-    color: 0xef4444,
-    roughness: 0.4,
-  });
-
-  // Cork hemisphere at the front (+Y)
-  const corkGeo = new THREE.SphereGeometry(0.068, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.55);
-  const cork = new THREE.Mesh(corkGeo, corkMat);
-  cork.position.y = 0.06;
-
-  // Red trim band around cork base
-  const bandGeo = new THREE.CylinderGeometry(0.07, 0.072, 0.022, 14);
-  const band = new THREE.Mesh(bandGeo, bandMat);
-  band.position.y = 0.05;
-
-  // Open conical feather skirt flaring toward -Y
-  const skirtGeo = new THREE.CylinderGeometry(0.068, 0.165, 0.22, 14, 1, true);
-  const skirt = new THREE.Mesh(skirtGeo, skirtMat);
-  skirt.position.y = -0.06;
-
-  group.add(cork, band, skirt);
-  return group;
-}
-
 function createPreallocatedArcGeometry(innerR: number, outerR: number, segments: number): THREE.BufferGeometry {
   const geo = new THREE.BufferGeometry();
   const vertexCount = (segments + 1) * 2;
@@ -551,12 +467,12 @@ export function createRenderer(container: HTMLElement) {
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0b111e);
   const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+  const arena = createArena(scene, renderer);
   buildCourt(scene);
 
   // Shuttlecock (cork hemisphere + feather skirt, 2.5x scale)
-  const shuttle = buildShuttleGroup();
+  const shuttle = createShuttlecockMesh();
 
   // Floor shadow under shuttle
   const shadow = new THREE.Mesh(flat(new THREE.CircleGeometry(1, 24)), basic(0x000000, 0.55));
@@ -665,6 +581,7 @@ export function createRenderer(container: HTMLElement) {
   function setQuality(q: GraphicsQuality) {
     renderer.setPixelRatio(pixelRatioFor(q, window.devicePixelRatio));
     extras = q !== 'low';
+    arena.setQuality(q);
     shadow.visible = dropLine.visible = trailLine.visible = extras;
     resize(); // re-applies the size so the buffer follows the new pixel ratio
   }
@@ -684,6 +601,7 @@ export function createRenderer(container: HTMLElement) {
 
   function render(view: WorldView, dt: number) {
     elapsed += Math.max(0, dt);
+    arena.update(elapsed);
 
     // Update human player rigs
     const shown = rigVisibility(view.players.length);
@@ -811,6 +729,7 @@ export function createRenderer(container: HTMLElement) {
     geometries.forEach((g) => g.dispose());
     materials.forEach((m) => m.dispose());
     labelTextures.forEach((t) => t.dispose());
+    arena.dispose();
     renderer.dispose();
     renderer.domElement.remove();
   }

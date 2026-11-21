@@ -1,13 +1,14 @@
-# Cross-review round 2: agy branch (cdf5e50) — V2a indoor hall — by Sonnet
+# Cross-review: agy branch (14d3913) — V3 textures and HDRI — by Sonnet
 
 ## Standards
-- Scope OK: only src/render/arena.ts and src/render/arena.test.ts; no new dependencies. No HARD or blocking JUDGEMENT issues.
+- Scope OK: only src/render/arena.ts and src/render/arena.test.ts; HDRLoader ships with three; no new dependencies.
+- src/render/arena.ts:~650-690 (configureTiledTexture, else branch of ensureHighOrMediumAssets) — HARD — `tex.needsUpdate = true` on textures with no image yet, assigned to materials at once: three logs "Texture marked for update but no image data found" every frame until the file arrives, forever if a file fails; the else branch also re-uploads loaded textures on every setQuality — drop those needsUpdate lines (TextureLoader sets it on load) or assign maps only in the load callbacks.
+- JUDGEMENT — HALL_FLOOR_COLOR tint on the wood map keeps the floor darker, not asserted against the mat with the texture; acceptable.
 
 ## Spec
-- Round 1 items fixed: side boards end at z = 6.4 with a full-extent test (arena.ts:194-221, arena.test.ts:140-159); floor 0x5c4732 darker and less saturated than the mat (tested); medium half fills all 4 rows of every stand (tested); sway timer resets when elapsed goes backwards (tested); PMREM failure logs console.warn.
-- All other spec items OK: contract, heights, inward single-sided shell, empty camera corridor, 3 lights and no shadows, RoomEnvironment via PMREM, instancing with sway at 4.5 Hz and no per-frame allocation, fictional names, quality levels, 8 draw calls, dispose.
+- Wood maps at ~2 m per tile, tinted: OK. Linoleum normal/roughness on the green mat: OK (court lines untouched by this diff). gym_01 HDRI through PMREM as scene.environment with RoomEnvironment fallback and console.warn: OK. Low quality loads nothing: OK. Anisotropy per quality: OK. Async: OK except the warning bug. dispose frees all textures and targets, late loads freed: OK.
 
 ## Checks
-- vitest 235 pass, tsc clean, vite build pass (at cdf5e50).
+- vitest 259 pass, tsc clean, vite build pass (at 14d3913).
 
-APPROVE cdf5e50
+CHANGES

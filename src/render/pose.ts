@@ -645,6 +645,8 @@ export const SHOULDER_RIGHT = 0.45; // m to the player's right
 export const SHOULDER_UP = 0.35;    // m above the head
 export const SHOULDER_HEIGHT_STEP = 1;     // m of camera height per 1.0 of the height offset
 export const SHOULDER_DISTANCE_STEP = 1.5; // m of camera distance per 1.0 of the distance offset
+export const SHOULDER_ZOOM_OUT = 6;   // zooming out adds this many m per unit of (1/zoom - 1): zoom 0.6 = about 6.6 m back
+export const SHOULDER_RISE = 0.35;    // camera rises this many m per extra m of pull-back, to keep looking over the player
 
 export interface ShoulderFraming extends CameraFraming { dir: Vec3 } // dir = unit forward
 
@@ -657,10 +659,11 @@ export function shoulderFraming(
   const sy = Math.sin(yaw), cy = Math.cos(yaw), cp = Math.cos(pitch);
   const h = clamp(Number.isFinite(height) ? height : 0, -1, 1);
   const d = clamp(Number.isFinite(distance) ? distance : 0, -1, 1);
-  const back = Math.max(0.6, (SHOULDER_BACK + d * SHOULDER_DISTANCE_STEP) / clampZoom(zoom));
+  const z = clampZoom(zoom), base = SHOULDER_BACK + d * SHOULDER_DISTANCE_STEP;
+  const back = Math.max(0.6, z >= 1 ? base / z : base + (1 / z - 1) * SHOULDER_ZOOM_OUT);
   out.dir.x = sy * cp; out.dir.y = Math.sin(pitch); out.dir.z = -cy * cp;
   out.pos.x = feet.x + cy * SHOULDER_RIGHT - sy * back; // right = (cos, 0, sin), flat forward = (sin, 0, -cos)
-  out.pos.y = feet.y + bodyHeight + SHOULDER_UP + h * SHOULDER_HEIGHT_STEP;
+  out.pos.y = feet.y + bodyHeight + SHOULDER_UP + h * SHOULDER_HEIGHT_STEP + Math.max(0, back - SHOULDER_BACK) * SHOULDER_RISE;
   out.pos.z = feet.z + sy * SHOULDER_RIGHT + cy * back;
   out.lookAt.x = out.pos.x + out.dir.x; out.lookAt.y = out.pos.y + out.dir.y; out.lookAt.z = out.pos.z + out.dir.z;
   return out;

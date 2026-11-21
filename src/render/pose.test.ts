@@ -378,4 +378,9 @@ describe('shoulderFraming', () => {
     expect(shoulderFraming(feet, 1.78, 0, 0, 1, 0, 1).pos.z).toBeGreaterThan(base.pos.z);
     expect(shoulderFraming(feet, 1.78, 0, 0, 1, 1, 0).pos.y).toBeGreaterThan(base.pos.y);
   });
+  it('zooming all the way out pulls back about 6.6 m and rises to look over the player', () => {
+    const out = shoulderFraming(feet, 1.78, 0, 0, 0.6);
+    expect(out.pos.z - feet.z).toBeCloseTo(SHOULDER_BACK + (1 / 0.6 - 1) * 6, 5);
+    expect(out.pos.y).toBeGreaterThan(shoulderFraming(feet, 1.78, 0, 0).pos.y + 1);
+  });
 });

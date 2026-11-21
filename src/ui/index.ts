@@ -358,6 +358,16 @@ function ensureStyles(): void {
       border: 1px solid rgba(245, 158, 11, 0.45);
       color: #fde68a;
     }
+    /* Sits outside the panel so a page or tab re-render cannot wipe it. */
+    .bm-storage-notice {
+      position: absolute;
+      left: 50%;
+      bottom: 16px;
+      transform: translateX(-50%);
+      margin: 0;
+      max-width: 92vw;
+      z-index: 1;
+    }
     .bm-error {
       margin-top: 12px;
       padding: 10px 14px;
@@ -575,18 +585,39 @@ function mountOverlay(root: HTMLElement): { overlay: HTMLElement; panel: HTMLEle
   return { overlay, panel };
 }
 
-function appendStorageNotice(parent: HTMLElement, savedOk: boolean): void {
-  const existing = parent.querySelector('[data-testid="storage-warning"]');
-  if (savedOk) {
-    existing?.remove();
-    return;
-  }
-  if (existing) return;
-  const warn = document.createElement('div');
-  warn.className = 'bm-notice';
-  warn.dataset.testid = 'storage-warning';
-  warn.textContent = 'ไม่สามารถบันทึกการตั้งค่าลงเบราว์เซอร์นี้ได้ (Storage unavailable)';
-  parent.appendChild(warn);
+interface StorageNotice {
+  // Records the result of the last writeSave call and shows / hides the notice from that flag.
+  set(savedOk: boolean): void;
+}
+
+// The notice is a sibling of the panel, not part of it: pages re-render their panel (`innerHTML = ''`)
+// on every action, so a notice inside it would disappear exactly when the player needs it. The flag
+// below is the last write result; the element is rendered from it.
+function createStorageNotice(overlay: HTMLElement): StorageNotice {
+  let lastWriteOk = true;
+  let warn: HTMLElement | null = null;
+
+  const render = (): void => {
+    if (lastWriteOk) {
+      warn?.remove();
+      warn = null;
+      return;
+    }
+    if (warn) return;
+    warn = document.createElement('div');
+    warn.className = 'bm-notice bm-storage-notice';
+    warn.dataset.testid = 'storage-warning';
+    warn.setAttribute('role', 'status');
+    warn.textContent = 'ไม่สามารถบันทึกการตั้งค่าลงเบราว์เซอร์นี้ได้ (Storage unavailable)';
+    overlay.appendChild(warn);
+  };
+
+  return {
+    set(savedOk: boolean): void {
+      lastWriteOk = savedOk;
+      render();
+    },
+  };
 }
 
 // ---------- 1. Home screen ----------
@@ -757,6 +788,7 @@ export function showMatchSetup(
   }
 
   const { overlay, panel } = mountOverlay(root);
+  const notice = createStorageNotice(overlay);
   let currentSave = save;
   const fittedEvent = fitEvent(currentSave.settings.match.event, active.stats.gender);
   if (fittedEvent !== currentSave.settings.match.event) {
@@ -767,8 +799,7 @@ export function showMatchSetup(
         match: { ...currentSave.settings.match, event: fittedEvent },
       },
     };
-    const ok = onSaveChange(currentSave);
-    appendStorageNotice(panel, ok);
+    notice.set(onSaveChange(currentSave));
   }
 
   const headerBar = document.createElement('div');
@@ -802,8 +833,7 @@ export function showMatchSetup(
         match: { ...currentSave.settings.match, ...patch },
       },
     };
-    const ok = onSaveChange(currentSave);
-    appendStorageNotice(panel, ok);
+    notice.set(onSaveChange(currentSave));
   };
 
   // Event picker filtered by active character gender
@@ -889,6 +919,7 @@ export function showCharacters(
   onBackToMenu: () => void,
 ): void {
   const { overlay, panel } = mountOverlay(root);
+  const notice = createStorageNotice(overlay);
   let currentSave = save;
   let editingId: string | 'new' | null = currentSave.characters.length === 0 ? 'new' : null;
   let confirmingDeleteId: string | null = null;
@@ -896,7 +927,7 @@ export function showCharacters(
   function commitSave(next: SaveData): void {
     currentSave = next;
     const ok = onSaveChange(currentSave);
-    appendStorageNotice(panel, ok);
+    notice.set(ok);
   }
 
   function renderPage(): void {
@@ -1283,6 +1314,7 @@ export function showSettingsPage(
   onBack: () => void,
 ): void {
   const { overlay, panel } = mountOverlay(root);
+  const notice = createStorageNotice(overlay);
   let currentSave = save;
   let activeTab: SettingsTab = 'camera';
   let listeningAction: InputAction | null = null;
@@ -1300,8 +1332,7 @@ export function showSettingsPage(
   function updateSettings(mutator: (s: GameSettings) => GameSettings): void {
     const cloned = structuredClone(currentSave.settings);
     currentSave = { ...currentSave, settings: mutator(cloned) };
-    const ok = onSaveChange(currentSave);
-    appendStorageNotice(panel, ok);
+    notice.set(onSaveChange(currentSave));
   }
 
   // Does not stop a pending capture: the capture state is rendered into the rows below, and every

@@ -1,13 +1,36 @@
 import { describe, expect, it } from 'vitest';
 import {
   AD_BRANDS,
+  COURT_MAT_COLOR,
   HALL_DIMENSIONS,
+  HALL_FLOOR_COLOR,
   buildAdBoardPlacements,
   buildStandSeats,
   computeSpectatorSwayY,
+  shouldUpdateSway,
   spectatorCountForQuality,
 } from './arena';
 import { COURT } from '../physics';
+
+function srgbToLinear(c: number): number {
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+
+function linearLuminance(hex: number): number {
+  const r = srgbToLinear(((hex >> 16) & 0xff) / 255);
+  const g = srgbToLinear(((hex >> 8) & 0xff) / 255);
+  const b = srgbToLinear((hex & 0xff) / 255);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function hsvSaturation(hex: number): number {
+  const r = ((hex >> 16) & 0xff) / 255;
+  const g = ((hex >> 8) & 0xff) / 255;
+  const b = (hex & 0xff) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  return max === 0 ? 0 : (max - min) / max;
+}
 
 describe('arena pure layout & quality helpers', () => {
   it('defines hall dimensions around 30 m wide, 44 m long, 12 m ceiling', () => {
@@ -72,19 +95,37 @@ describe('arena pure layout & quality helpers', () => {
     }
   });
 
-  it('interleaves seats across stands so the first half covers west, east and far stands evenly', () => {
+  it('interleaves seats across stands and rows so the first half covers every row of every stand evenly', () => {
     const seats = buildStandSeats();
     const halfCount = spectatorCountForQuality('medium', seats.length);
     const firstHalf = seats.slice(0, halfCount);
 
     const counts = { west: 0, east: 0, far: 0 };
-    for (const s of firstHalf) counts[s.stand]++;
+    const rowsByStand = {
+      west: new Set<number>(),
+      east: new Set<number>(),
+      far: new Set<number>(),
+    };
+    const allRowsByStand = {
+      west: new Set<number>(),
+      east: new Set<number>(),
+      far: new Set<number>(),
+    };
+    for (const s of seats) allRowsByStand[s.stand].add(s.row);
+    for (const s of firstHalf) {
+      counts[s.stand]++;
+      rowsByStand[s.stand].add(s.row);
+    }
 
     expect(counts.west).toBeGreaterThan(0);
     expect(counts.east).toBeGreaterThan(0);
     expect(counts.far).toBeGreaterThan(0);
     // West and east stands are symmetric and should have near-equal representation in the first half
     expect(Math.abs(counts.west - counts.east)).toBeLessThanOrEqual(2);
+    // Every row of every stand must be populated in the first half (not only the front rows)
+    expect(rowsByStand.west.size).toBe(allRowsByStand.west.size);
+    expect(rowsByStand.east.size).toBe(allRowsByStand.east.size);
+    expect(rowsByStand.far.size).toBe(allRowsByStand.far.size);
   });
 
   it('returns spectator count per quality: low = 0, medium = about half, high = all', () => {
@@ -96,13 +137,23 @@ describe('arena pure layout & quality helpers', () => {
     expect(spectatorCountForQuality('high', total)).toBe(total);
   });
 
-  it('places fictional advertising boards outside the court and clear of the near camera corridor', () => {
+  it('places fictional advertising boards outside the court and clear of the near camera corridor across their full extent', () => {
     expect(AD_BRANDS).toEqual(['BADMINTON 3D', 'SHUTTLE CUP', 'SMASH ARENA', 'NET KINGS']);
     const boards = buildAdBoardPlacements();
     expect(boards.length).toBeGreaterThanOrEqual(6);
     for (const b of boards) {
       expect(b.height).toBeCloseTo(0.9, 2);
-      const inNearCameraCorridor = Math.abs(b.x) < 6 && b.z > COURT.halfLength;
+      // A board rotated by rotY = ±PI/2 spans along Z by ±width/2; rotY = 0 spans along X by ±width/2.
+      const halfSpanX = Math.abs(Math.cos(b.rotY)) * (b.width * 0.5);
+      const halfSpanZ = Math.abs(Math.sin(b.rotY)) * (b.width * 0.5);
+      const minX = b.x - halfSpanX;
+      const maxX = b.x + halfSpanX;
+      const maxZ = b.z + halfSpanZ;
+
+      // Every board must end at z <= 6.7 (COURT.halfLength) and never overlap the near camera corridor (|x| < 6, z > 6.7)
+      expect(maxZ).toBeLessThanOrEqual(COURT.halfLength);
+      const overlapsCorridorX = minX < 6 && maxX > -6;
+      const inNearCameraCorridor = overlapsCorridorX && maxZ > COURT.halfLength;
       expect(inNearCameraCorridor).toBe(false);
     }
   });
@@ -113,5 +164,18 @@ describe('arena pure layout & quality helpers', () => {
     expect(Math.abs(y0)).toBeLessThanOrEqual(0.05);
     expect(Math.abs(y1)).toBeLessThanOrEqual(0.05);
     expect(y1).not.toBeCloseTo(y0, 4);
+  });
+
+  it('keeps the wood hall floor darker and less saturated than the green court mat', () => {
+    expect(linearLuminance(HALL_FLOOR_COLOR)).toBeLessThan(linearLuminance(COURT_MAT_COLOR));
+    expect(hsvSaturation(HALL_FLOOR_COLOR)).toBeLessThan(hsvSaturation(COURT_MAT_COLOR));
+  });
+
+  it('resets the sway timer when elapsed restarts at a smaller value instead of freezing', () => {
+    expect(shouldUpdateSway(0, -1, 0.22)).toBe(true);
+    expect(shouldUpdateSway(10.1, 10.0, 0.22)).toBe(false);
+    expect(shouldUpdateSway(10.25, 10.0, 0.22)).toBe(true);
+    // Restart: elapsed drops from 10.0 back to 0.05 -> must update immediately and reset timer
+    expect(shouldUpdateSway(0.05, 10.0, 0.22)).toBe(true);
   });
 });

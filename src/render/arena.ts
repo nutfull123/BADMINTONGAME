@@ -21,6 +21,9 @@ export const HALL_DIMENSIONS = {
 
 export const AD_BRANDS = ['BADMINTON 3D', 'SHUTTLE CUP', 'SMASH ARENA', 'NET KINGS'] as const;
 
+export const HALL_FLOOR_COLOR = 0x5c4732;
+export const COURT_MAT_COLOR = 0x1f7a4f;
+
 export type StandSide = 'west' | 'east' | 'far';
 
 export interface StandSeat {
@@ -92,15 +95,18 @@ export function buildStandSeats(): StandSeat[] {
 
   const sideZPositions = [-7.8, -5.2, -2.6, 0, 2.6, 5.2, 7.8];
   const farXPositions = [-6.0, -4.0, -2.0, 0, 2.0, 4.0, 6.0];
+  // Column order puts even indices first, then odd indices, so when iterating column-major across rows
+  // the first half of the array covers every row of every stand evenly.
+  const colOrder = [0, 2, 4, 6, 1, 3, 5];
 
   let idx = 0;
-  for (let row = 0; row < ROW_COUNT; row++) {
-    const y = ROW_BASE_Y + row * ROW_RISE;
-    const xDist = SIDE_STAND_START_X + row * ROW_DEPTH;
-    const zDist = FAR_STAND_START_Z - row * ROW_DEPTH;
-
-    for (let c = 0; c < sideZPositions.length; c++) {
+  for (const c of colOrder) {
+    for (let row = 0; row < ROW_COUNT; row++) {
+      const y = ROW_BASE_Y + row * ROW_RISE;
+      const xDist = SIDE_STAND_START_X + row * ROW_DEPTH;
+      const zDist = FAR_STAND_START_Z - row * ROW_DEPTH;
       const z = sideZPositions[c] + (row % 2 === 0 ? -0.25 : 0.25);
+
       westSeats.push({
         stand: 'west',
         row,
@@ -126,9 +132,7 @@ export function buildStandSeats(): StandSeat[] {
         phase: (idx * 1.37) % (Math.PI * 2),
       });
       idx++;
-    }
 
-    for (let c = 0; c < farXPositions.length; c++) {
       const x = farXPositions[c] + (row % 2 === 0 ? 0.22 : -0.22);
       farSeats.push({
         stand: 'far',
@@ -175,14 +179,23 @@ export function computeSpectatorSwayY(elapsed: number, phase: number): number {
 }
 
 /**
+ * Returns true if spectator sway matrices should be updated at `elapsed`.
+ * Resets immediately if `elapsed < lastSwayUpdate` (clock restart).
+ */
+export function shouldUpdateSway(elapsed: number, lastSwayUpdate: number, interval: number): boolean {
+  if (lastSwayUpdate < 0 || elapsed < lastSwayUpdate) return true;
+  return elapsed - lastSwayUpdate >= interval;
+}
+
+/**
  * Builds the 0.9 m-tall perimeter A-frame advertising board placements along both long sides
  * (`|x| = 5.6`) and behind the far baseline (`z = -9.2`). Nothing is placed in the near camera corridor.
  */
 export function buildAdBoardPlacements(): AdBoardPlacement[] {
   const height = 0.9;
   const y = height * 0.5;
-  const sideWidth = 3.8;
-  const sideZ = [-6.2, -2.0, 2.0, 6.2];
+  const sideWidth = 3.0;
+  const sideZ = [-4.9, -1.7, 1.7, 4.9];
   const placements: AdBoardPlacement[] = [];
   let b = 0;
 
@@ -398,13 +411,13 @@ export function createArena(scene: THREE.Scene, renderer: THREE.WebGLRenderer): 
   // 1. Warm wooden hall floor around the court (y = -0.01) & green court mat (y = 0)
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(HALL_DIMENSIONS.halfWidth * 2, HALL_DIMENSIONS.halfLength * 2).rotateX(-Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: 0x9b7046, roughness: 0.68, metalness: 0.04 }),
+    new THREE.MeshStandardMaterial({ color: HALL_FLOOR_COLOR, roughness: 0.74, metalness: 0.04 }),
   );
   floor.position.y = -0.01;
 
   const courtMat = new THREE.Mesh(
     new THREE.PlaneGeometry(COURT.halfWidthDoubles * 2 + 1.8, COURT.halfLength * 2 + 1.8).rotateX(-Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: 0x1f7a4f, roughness: 0.62, metalness: 0.02 }),
+    new THREE.MeshStandardMaterial({ color: COURT_MAT_COLOR, roughness: 0.62, metalness: 0.02 }),
   );
   courtMat.position.y = 0;
 
@@ -441,8 +454,8 @@ export function createArena(scene: THREE.Scene, renderer: THREE.WebGLRenderer): 
     envRenderTarget = pmremGenerator.fromScene(roomEnv, 0.04);
     envTexture = envRenderTarget.texture;
     roomEnv.dispose();
-  } catch {
-    // Headless or mock renderer fallback
+  } catch (err) {
+    console.warn('RoomEnvironment PMREM generation failed; falling back to direct lights:', err);
     envTexture = null;
   }
 
@@ -582,7 +595,7 @@ export function createArena(scene: THREE.Scene, renderer: THREE.WebGLRenderer): 
 
   function update(elapsed: number): void {
     if (currentQuality !== 'high') return;
-    if (lastSwayUpdate >= 0 && elapsed - lastSwayUpdate < SWAY_INTERVAL) return;
+    if (!shouldUpdateSway(elapsed, lastSwayUpdate, SWAY_INTERVAL)) return;
     lastSwayUpdate = elapsed;
     writeSpectatorMatrices(spectatorBodies.count, elapsed, true);
   }

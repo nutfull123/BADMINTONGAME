@@ -1,0 +1,24 @@
+{
+  // Opens read-only terminals that show opencode and agy working, every time this folder opens.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "view opencode (crew-oc)",
+      "type": "shell",
+      "command": "bash scripts/view-crew.sh oc",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "group": "crew" },
+      "runOptions": { "runOn": "folderOpen" }
+    },
+    {
+      "label": "view agy (crew-agy)",
+      "type": "shell",
+      "command": "bash scripts/view-crew.sh agy",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "group": "crew" },
+      "runOptions": { "runOn": "folderOpen" }
+    }
+  ]
+}

@@ -32,6 +32,7 @@ import {
   toMatchSettings,
 } from '../app/settings';
 import { heightOf } from '../sim/tuning';
+import { captureStep, isCaptureIgnoredTarget } from './capture';
 import { EVENTS, eventsFor, fitEvent } from './events';
 import {
   ACTION_LABELS,
@@ -1303,8 +1304,9 @@ export function showSettingsPage(
     appendStorageNotice(panel, ok);
   }
 
+  // Does not stop a pending capture: the capture state is rendered into the rows below, and every
+  // caller that changes tabs or leaves the page calls stopListening() itself.
   function renderTabs(): void {
-    stopListening();
     panel.innerHTML = '';
 
     const headerBar = document.createElement('div');
@@ -1341,6 +1343,7 @@ export function showSettingsPage(
       btn.dataset.tab = t.id;
       btn.textContent = t.label;
       btn.addEventListener('click', () => {
+        stopListening();
         activeTab = t.id;
         conflictNotice = null;
         renderTabs();
@@ -1444,6 +1447,7 @@ export function showSettingsPage(
     resetBtn.dataset.testid = 'reset-keys';
     resetBtn.textContent = 'คืนค่าเริ่มต้น';
     resetBtn.addEventListener('click', () => {
+      stopListening();
       conflictNotice = null;
       updateSettings((s) => ({
         ...s,
@@ -1480,7 +1484,8 @@ export function showSettingsPage(
       changeBtn.type = 'button';
       changeBtn.className = `bm-btn bm-btn-sm${listeningAction === action ? ' bm-btn-active' : ''}`;
       changeBtn.dataset.rebind = action;
-      changeBtn.textContent = listeningAction === action ? 'กำลังรอ...' : 'เปลี่ยน';
+      changeBtn.textContent = listeningAction === action ? 'ยกเลิก (Cancel)' : 'เปลี่ยน';
+      changeBtn.setAttribute('aria-pressed', listeningAction === action ? 'true' : 'false');
       changeBtn.addEventListener('click', (ev) => {
         ev.stopPropagation();
         startListeningForAction(action);
@@ -1495,10 +1500,15 @@ export function showSettingsPage(
   }
 
   function startListeningForAction(action: InputAction): void {
+    const step = captureStep(listeningAction, action);
     stopListening();
+    if (step === 'cancel') {
+      renderTabs();
+      return;
+    }
+    // Set the state before rendering so exactly one row shows "กดปุ่มหรือคลิกเมาส์... (Esc ยกเลิก)".
     listeningAction = action;
     renderTabs();
-    listeningAction = action;
 
     const applyCode = (code: string) => {
       stopListening();
@@ -1523,6 +1533,9 @@ export function showSettingsPage(
     };
 
     const onMouseDown = (e: MouseEvent) => {
+      // A press on a control (เปลี่ยน button, tab, input) is a UI click, not a binding: its own click
+      // handler cancels or switches the capture, so the press must not be read as Mouse0/Mouse2.
+      if (isCaptureIgnoredTarget(e.target as Element | null)) return;
       if (e.button !== 0 && e.button !== 2) return;
       e.preventDefault();
       e.stopPropagation();

@@ -25,7 +25,7 @@ export function startGame(root: HTMLElement): void {
   };
 
   const openHome = (): void => {
-    showHome(root, openMenu);
+    showHome(root, openMenu, save.settings.controls.keys);
   };
 
   const openMenu = (): void => {

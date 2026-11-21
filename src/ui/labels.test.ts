@@ -8,9 +8,11 @@ import {
   formatBindingList,
   formatConflictMessage,
   formatCharacterSummary,
+  formatControlHints,
+  formatMovementHint,
   matchesBinding,
 } from './labels';
-import { DEFAULT_KEYS } from '../app/settings';
+import { DEFAULT_KEYS, rebindKey } from '../app/settings';
 import type { Character } from '../types';
 
 describe('UI shell pure helpers (labels, key formatting, conflict warning, character summary)', () => {
@@ -68,5 +70,29 @@ describe('UI shell pure helpers (labels, key formatting, conflict warning, chara
     expect(matchesBinding(DEFAULT_KEYS, 'zoomIn', 'Equal')).toBe(true);
     expect(matchesBinding(DEFAULT_KEYS, 'zoomIn', 'NumpadAdd')).toBe(true);
     expect(matchesBinding(DEFAULT_KEYS, 'zoomOut', 'Minus')).toBe(true);
+  });
+
+  it('formats the movement hint compactly from the saved bindings', () => {
+    expect(formatMovementHint(DEFAULT_KEYS)).toBe('WASD');
+    const arrows = { ...DEFAULT_KEYS, up: ['ArrowUp'], left: ['ArrowLeft'], down: ['ArrowDown'], right: ['ArrowRight'] };
+    expect(formatMovementHint(arrows)).toBe('↑←↓→');
+  });
+
+  it('formats the Home control hint from the saved bindings, not from hard-coded keys', () => {
+    const hint = formatControlHints(DEFAULT_KEYS);
+    expect(hint).toContain('WASD เคลื่อนที่');
+    expect(hint).toContain('Q/E ตีพื้นฐาน');
+    expect(hint).toContain('คลิกซ้าย (LMB) ค้าง = ตบ');
+    expect(hint).toContain('Space ค้าง = กระโดด');
+    expect(hint).toContain('F เต็มจอ');
+
+    const rebound = rebindKey(DEFAULT_KEYS, 'up', 'ArrowUp').keys;
+    const reboundHint = formatControlHints(rebound);
+    expect(reboundHint).toContain('↑ASD เคลื่อนที่');
+    expect(reboundHint).not.toContain('WASD');
+
+    const allRebound = rebindKey(rebindKey(DEFAULT_KEYS, 'jump', 'KeyJ').keys, 'dive', 'KeyV').keys;
+    expect(formatControlHints(allRebound)).toContain('J ค้าง = กระโดด');
+    expect(formatControlHints(allRebound)).toContain('V = พุ่งรับ');
   });
 });

@@ -100,6 +100,28 @@ export function formatBindingList(codes: readonly string[]): string {
   return codes.map(formatKeyCode).join(' / ');
 }
 
+// Movement reads best as "WASD" / "↑←↓→": single-character keys are joined without separators.
+export function formatMovementHint(keys: KeyBindings): string {
+  const shown = [...keys.up, ...keys.left, ...keys.down, ...keys.right].map(formatKeyCode);
+  return shown.every((code) => code.length === 1) ? shown.join('') : shown.join(' / ');
+}
+
+// The Home screen hint, built from the saved bindings so it stays true after a rebind.
+export function formatControlHints(keys: KeyBindings): string {
+  return [
+    'เมาส์เล็งหน้าไม้ + สะบัดทิศทาง',
+    `${formatMovementHint(keys)} เคลื่อนที่`,
+    `${formatBindingList(keys.backhand)}/${formatBindingList(keys.forehand)} ตีพื้นฐาน`,
+    `${formatBindingList(keys.smash)} ค้าง = ตบ (Smash)`,
+    `${formatBindingList(keys.drop)} ค้าง = หยอด/เสิร์ฟสั้น`,
+    `${formatBindingList(keys.clear)} ค้าง = เคลียร์/เสิร์ฟยาว`,
+    `${formatBindingList(keys.net)} = ลูกหน้าเน็ต`,
+    `${formatBindingList(keys.jump)} ค้าง = กระโดด`,
+    `${formatBindingList(keys.dive)} = พุ่งรับ/กดรัวเพื่อลุก`,
+    `${formatBindingList(keys.fullscreen)} เต็มจอ · ${formatBindingList(keys.zoomIn)}/${formatBindingList(keys.zoomOut)} ซูม`,
+  ].join(' · ');
+}
+
 export function formatConflictMessage(conflict: InputAction | null, code: string): string | null {
   if (!conflict) return null;
   return `คำเตือน: ปุ่ม "${formatKeyCode(code)}" ซ้ำกับ "${ACTION_LABELS[conflict]}"`;

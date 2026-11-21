@@ -6,6 +6,7 @@ import type {
   Gender,
   GraphicsQuality,
   InputAction,
+  KeyBindings,
   MatchEvent,
   MatchSettings,
   MatchState,
@@ -42,6 +43,7 @@ import {
   formatBindingList,
   formatCharacterSummary,
   formatConflictMessage,
+  formatControlHints,
   GENDER_LABELS,
   GRAPHICS_QUALITY_LABELS,
   matchesBinding,
@@ -622,7 +624,11 @@ function createStorageNotice(overlay: HTMLElement): StorageNotice {
 
 // ---------- 1. Home screen ----------
 
-export function showHome(root: HTMLElement, onPlayGuest: () => void): void {
+export function showHome(
+  root: HTMLElement,
+  onPlayGuest: () => void,
+  keys: KeyBindings = loadSave().settings.controls.keys,
+): void {
   const { overlay, panel } = mountOverlay(root);
 
   const title = document.createElement('h1');
@@ -657,8 +663,8 @@ export function showHome(root: HTMLElement, onPlayGuest: () => void): void {
 
   const hint = document.createElement('div');
   hint.className = 'bm-keys-hint';
-  hint.textContent =
-    'WASD เคลื่อนที่ · เมาส์เล็งหน้าไม้ + สะบัดทิศทาง · Q/E ตีพื้นฐาน · คลิกซ้ายค้าง = ตบ (Smash) · คลิกขวาค้าง = หยอด/เสิร์ฟสั้น · LShift ค้าง = เคลียร์/เสิร์ฟยาว · Alt = ลูกหน้าเน็ต · Space ค้าง = กระโดด · C = พุ่งรับ/กดรัวเพื่อลุก';
+  hint.dataset.testid = 'home-control-hints';
+  hint.textContent = formatControlHints(keys);
 
   panel.append(title, sub, btnRow, hint);
 }

@@ -1,11 +1,12 @@
-import type { Intent } from '../types';
+import type { ControlSettings, Intent } from '../types';
+import { DEFAULT_GAME_SETTINGS } from '../app/settings';
 import { buildIntent, newKeyState, newMouseAccum, LMB, RMB } from './intent';
 
 export { buildIntent } from './intent';
 
 const BLOCKED = new Set(['AltLeft', 'AltRight', 'Space', 'Tab']);
 
-export function createInput(canvas: HTMLCanvasElement) {
+export function createInput(canvas: HTMLCanvasElement, controls: ControlSettings = DEFAULT_GAME_SETTINGS.controls) {
   const keys = newKeyState();
   const mouse = newMouseAccum();
   const lockCbs: ((locked: boolean) => void)[] = [];
@@ -53,7 +54,7 @@ export function createInput(canvas: HTMLCanvasElement) {
   canvas.addEventListener('click', onClick);
 
   return {
-    intent: (dt: number): Intent => buildIntent(keys, mouse, dt, serving),
+    intent: (dt: number): Intent => buildIntent(keys, mouse, dt, serving, controls),
     setServing: (v: boolean) => { serving = v; },
     isLocked,
     onLockChange: (cb: (locked: boolean) => void) => { lockCbs.push(cb); },

@@ -1,5 +1,6 @@
 // Tutorial mode: runs the eight drills in src/tutorial/ with the same renderer, input, sim and
 // HUD message line as a match. The drill state machine is pure; this file only drives it.
+import { loadSave } from '../app/save';
 import { createInput } from '../input';
 import { createRenderer } from '../render';
 import { predictLanding, stepShuttle } from '../physics';
@@ -44,10 +45,13 @@ export function startTutorial(root: HTMLElement, setup: TutorialSetup, onAgain: 
   const container = document.createElement('div');
   container.style.cssText = 'position:absolute;inset:0';
   root.appendChild(container);
+  const prefs = loadSave().settings;
   const renderer = createRenderer(container);
-  const input = createInput(container.querySelector('canvas')!);
+  renderer.setCamera(prefs.camera);
+  renderer.setQuality(prefs.graphics.quality);
+  const input = createInput(container.querySelector('canvas')!, prefs.controls);
   const hud = createHud(root);
-  const viewControls = createViewControls(root, (z) => (renderer as { setZoom?: (z: number) => void }).setZoom?.(z)); // render adds setZoom in a parallel task
+  const viewControls = createViewControls(root, (z) => renderer.setZoom(z));
   const hudMatch: MatchState = createMatch(FORMAT_3X15, 'near');
 
   const tut = createTutorial();
@@ -268,7 +272,7 @@ export function startTutorial(root: HTMLElement, setup: TutorialSetup, onAgain: 
       landing: showTarget ? target : settings.landingMarker && stage === 'flight' ? predictLanding(shuttle) : null,
       timingRing: settings.timingRing && charging ? Math.max(0, Math.min(1, 1 - gap / 1.5)) : null,
       charge: charging && human ? chargeLevel(near, human.chargeTime) : null,
-      aim: aimView(near, shuttle, assist),
+      aim: prefs.assists.racketAid ? aimView(near, shuttle, assist) : undefined,
     };
   }
 

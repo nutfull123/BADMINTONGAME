@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import type { PlayerState, Side, Slot, Vec3, WorldView } from '../types';
+import type { CameraSettings, GraphicsQuality, PlayerState, Side, Slot, Vec3, WorldView } from '../types';
 import { heightOf } from '../sim/tuning';
 import {
   MAX_RIGS,
   clampZoom,
-  computeCameraFraming,
+  computePresetFraming,
+  pixelRatioFor,
   computePlayerPose,
   computePulseScale,
   followedPlayer,
@@ -652,6 +653,21 @@ export function createRenderer(container: HTMLElement) {
   let chargeShown = -1;
   let targetZoom = 1;
   let currentZoom = 1;
+  let camSetup: CameraSettings = { preset: 'behindHigh', height: 0, distance: 0, zoom: 1, follow: true };
+  let extras = true; // low quality drops the shuttle shadow, drop line and trail
+
+  function setCamera(c: CameraSettings) {
+    camSetup = { ...c };
+    targetZoom = currentZoom = clampZoom(c.zoom);
+    if (!c.follow) camX = 0;
+  }
+
+  function setQuality(q: GraphicsQuality) {
+    renderer.setPixelRatio(pixelRatioFor(q, window.devicePixelRatio));
+    extras = q !== 'low';
+    shadow.visible = dropLine.visible = trailLine.visible = extras;
+    resize(); // re-applies the size so the buffer follows the new pixel ratio
+  }
 
   function setZoom(z: number) {
     targetZoom = clampZoom(z);
@@ -679,9 +695,9 @@ export function createRenderer(container: HTMLElement) {
     }
 
     // Smooth camera follow + aspect/FOV-computed framing of both baselines & sidelines + zoom easing
-    if (near) camX += (near.pos.x - camX) * (1 - Math.exp(-CAM_FOLLOW * dt));
+    if (near && camSetup.follow) camX += (near.pos.x - camX) * (1 - Math.exp(-CAM_FOLLOW * dt));
     currentZoom = stepZoom(currentZoom, targetZoom, dt);
-    const framing = computeCameraFraming(camera.aspect, CAM_FOV_DEG, camX, currentZoom);
+    const framing = computePresetFraming(camSetup, camera.aspect, CAM_FOV_DEG, camX, currentZoom);
     camera.position.set(framing.pos.x, framing.pos.y, framing.pos.z);
     camera.lookAt(framing.lookAt.x, framing.lookAt.y, framing.lookAt.z);
 
@@ -706,7 +722,7 @@ export function createRenderer(container: HTMLElement) {
     (dropLineGeo.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
 
     // Shuttle trail (~0.3 s)
-    pushTrailPoint(trailBuffer, pos, elapsed);
+    if (extras) pushTrailPoint(trailBuffer, pos, elapsed);
     const pts = trailBuffer.points;
     const count = pts.length;
     for (let i = 0; i < count; i++) {
@@ -799,5 +815,5 @@ export function createRenderer(container: HTMLElement) {
     renderer.domElement.remove();
   }
 
-  return { render, resize, dispose, setZoom };
+  return { render, resize, dispose, setZoom, setCamera, setQuality };
 }

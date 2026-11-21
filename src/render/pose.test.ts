@@ -294,3 +294,58 @@ describe('doubles render maths', () => {
     expect(lum(teamColor('far', 1))).toBeGreaterThan(lum(teamColor('far', 0)));
   });
 });
+
+import { computePresetFraming, pixelRatioFor, CAMERA_HEIGHT_STEP, CAMERA_DISTANCE_STEP } from './pose';
+
+describe('camera presets and quality', () => {
+  const presets = ['behindHigh', 'behindLow', 'broadcast'] as const;
+  const at = (preset: (typeof presets)[number], aspect: number, camX = 0, height = 0, distance = 0) =>
+    computePresetFraming({ preset, height, distance }, aspect, 50, camX, 1);
+
+  it('every preset keeps both baselines in view and the far player below the HUD band (top 10%)', () => {
+    for (const preset of presets) {
+      for (const aspect of [16 / 9, 16 / 10]) {
+        for (const camX of [0, 2.59, -2.59]) {
+          const cam = at(preset, aspect, camX);
+          for (const x of [-3.05, 3.05]) {
+            for (const z of [-6.7, 6.7]) {
+              const n = projectPointToNdc({ x, y: 0, z }, cam, aspect, 50);
+              expect(Math.abs(n.x)).toBeLessThanOrEqual(0.96);
+              expect(Math.abs(n.y)).toBeLessThanOrEqual(0.96);
+            }
+          }
+          // tallest far player (1.95 m) standing on the far baseline, on centre and at the sidelines
+          for (const x of [0, -3.05, 3.05]) {
+            expect(projectPointToNdc({ x, y: 1.95, z: -6.7 }, cam, aspect, 50).y).toBeLessThanOrEqual(0.8);
+          }
+        }
+      }
+    }
+  });
+
+  it('behindLow is lower and closer than behindHigh; broadcast is higher and farther back', () => {
+    const dist = (c: ReturnType<typeof at>) => Math.hypot(c.pos.y - 0, c.pos.z - 6.7);
+    const high = at('behindHigh', 16 / 9), low = at('behindLow', 16 / 9), tv = at('broadcast', 16 / 9);
+    expect(low.pos.y).toBeLessThan(high.pos.y);
+    expect(dist(low)).toBeLessThan(dist(high));
+    expect(tv.pos.y).toBeGreaterThan(high.pos.y);
+    expect(dist(tv)).toBeGreaterThan(dist(high));
+  });
+
+  it('height +1 is 2 m higher and distance +1 is 3 m farther; zoom still moves the camera closer', () => {
+    const base = at('behindHigh', 16 / 9);
+    expect(at('behindHigh', 16 / 9, 0, 1, 0).pos.y - base.pos.y).toBeCloseTo(CAMERA_HEIGHT_STEP);
+    expect(at('behindHigh', 16 / 9, 0, -1, 0).pos.y - base.pos.y).toBeCloseTo(-CAMERA_HEIGHT_STEP);
+    expect(at('behindHigh', 16 / 9, 0, 0, 1).pos.z - base.pos.z).toBeCloseTo(CAMERA_DISTANCE_STEP);
+    const zoomed = computePresetFraming({ preset: 'behindHigh', height: 0, distance: 0 }, 16 / 9, 50, 0, 1.5);
+    expect(zoomed.pos.z).toBeLessThan(base.pos.z);
+  });
+
+  it('pixel ratio: low 1, medium up to 1.5, high device ratio capped at 2', () => {
+    expect(pixelRatioFor('low', 3)).toBe(1);
+    expect(pixelRatioFor('medium', 3)).toBe(1.5);
+    expect(pixelRatioFor('medium', 1)).toBe(1);
+    expect(pixelRatioFor('high', 3)).toBe(2);
+    expect(pixelRatioFor('high', 1.25)).toBe(1.25);
+  });
+});

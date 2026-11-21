@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { DEFAULT_KEYS } from '../app/settings';
+import type { ControlSettings } from '../types';
 import { buildIntent, newKeyState, newMouseAccum, MOUSE_SENS, LMB, RMB } from './intent';
 
 const press = (k: ReturnType<typeof newKeyState>, code: string) => { k.down.add(code); k.pressed.add(code); };
@@ -107,5 +109,62 @@ describe('buildIntent', () => {
     const j = buildIntent(k, m, 0.01, false);
     expect(j.dive).toBe(false);
     expect(j.netShot).toBe(false);
+  });
+});
+
+describe('buildIntent with rebound controls', () => {
+  const controls = (keys: Partial<ControlSettings['keys']>, mouseSensitivity = 1): ControlSettings =>
+    ({ mouseSensitivity, keys: { ...DEFAULT_KEYS, ...keys } });
+
+  it('jump on KeyJ, smash on KeyK; old keys no longer work', () => {
+    const c = controls({ jump: ['KeyJ'], smash: ['KeyK'] });
+    const k = newKeyState(); const m = newMouseAccum();
+    press(k, 'KeyJ'); press(k, 'KeyK'); press(k, 'Space'); press(k, LMB);
+    buildIntent(k, m, 0.1, false, c);
+    const i = buildIntent(k, m, 0.1, false, c);
+    expect(i.jumpCharge).toBeCloseTo(0.2);
+    expect(i.charging).toBe('smash');
+    expect(i.chargeTime).toBeCloseTo(0.2);
+    release(k, 'KeyJ'); release(k, 'KeyK');
+    const r = buildIntent(k, m, 0.1, false, c);
+    expect(r.jumpRelease).toBe(true);
+    expect(r.release).toBe('smash');
+    const k2 = newKeyState(); press(k2, 'Space'); press(k2, LMB);
+    const o = buildIntent(k2, newMouseAccum(), 0.1, false, c);
+    expect(o.jumpCharge).toBe(0);
+    expect(o.charging).toBeNull();
+  });
+
+  it('movement, swings, dive and net use the rebound keys; any code in a list triggers', () => {
+    const c = controls({ up: ['ArrowUp'], left: ['ArrowLeft', 'KeyA'], backhand: ['KeyU'], dive: ['KeyV'], net: ['KeyN'] });
+    const k = newKeyState(); const m = newMouseAccum();
+    press(k, 'ArrowUp'); press(k, 'KeyA'); press(k, 'KeyU'); press(k, 'KeyV'); press(k, 'KeyN');
+    const i = buildIntent(k, m, 0.01, false, c);
+    expect(i.move).toEqual({ x: -1, z: -1 });
+    expect(i.basicSwing).toBe('backhand');
+    expect(i.dive).toBe(true);
+    expect(i.netShot).toBe(true);
+  });
+
+  it('serve remap follows the drop and clear bindings', () => {
+    const c = controls({ drop: ['KeyX'], clear: ['KeyZ'] });
+    const k = newKeyState(); const m = newMouseAccum();
+    press(k, 'KeyX');
+    expect(buildIntent(k, m, 0.1, true, c).charging).toBe('serveShort');
+    release(k, 'KeyX'); press(k, 'KeyZ');
+    expect(buildIntent(k, m, 0.1, true, c).charging).toBe('serveLong');
+  });
+
+  it('mouse sensitivity scales racket movement', () => {
+    const k = newKeyState();
+    const m = newMouseAccum(); m.dx = 50; m.dy = -50;
+    const i = buildIntent(k, m, 0.1, false, controls({}, 2));
+    expect(i.racket.x).toBeCloseTo(50 * MOUSE_SENS * 2);
+    expect(i.racket.y).toBeCloseTo(50 * MOUSE_SENS * 2);
+  });
+
+  it('does not mutate the frozen defaults', () => {
+    const k = newKeyState(); press(k, 'KeyW');
+    expect(() => buildIntent(k, newMouseAccum(), 0.1, false)).not.toThrow();
   });
 });

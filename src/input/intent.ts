@@ -1,4 +1,5 @@
-import type { Intent, ShotType } from '../types';
+import type { ControlSettings, Intent, ShotType } from '../types';
+import { DEFAULT_KEYS } from '../app/settings';
 
 export const MOUSE_SENS = 0.004; // racket units (-1..1) per pixel of mouse movement
 
@@ -21,39 +22,48 @@ export const newMouseAccum = (): MouseAccum => ({ dx: 0, dy: 0, x: 0, y: 0 });
 
 const clamp1 = (v: number) => Math.max(-1, Math.min(1, v));
 
-export function buildIntent(keys: KeyState, mouse: MouseAccum, dt: number, serving: boolean): Intent {
+// Defaults reproduce the original fixed bindings. DEFAULT_KEYS is frozen: only read it.
+const DEFAULT_CONTROLS: ControlSettings = { mouseSensitivity: 1, keys: DEFAULT_KEYS };
+
+export function buildIntent(
+  keys: KeyState, mouse: MouseAccum, dt: number, serving: boolean, controls: ControlSettings = DEFAULT_CONTROLS,
+): Intent {
   const { down, pressed, released, held } = keys;
   for (const c of down) held[c] = (held[c] ?? 0) + dt;
 
-  const axis = (neg: string, pos: string) => (down.has(pos) ? 1 : 0) - (down.has(neg) ? 1 : 0);
+  const b = controls.keys;
+  const anyIn = (set: Set<string>, codes: readonly string[]) => codes.some((c) => set.has(c));
+  const heldOf = (codes: readonly string[]) => Math.max(0, ...codes.map((c) => held[c] ?? 0));
+  const axis = (neg: readonly string[], pos: readonly string[]) => (anyIn(down, pos) ? 1 : 0) - (anyIn(down, neg) ? 1 : 0);
+  const sens = MOUSE_SENS * controls.mouseSensitivity;
 
   const px = mouse.x, py = mouse.y;
-  mouse.x = clamp1(px + mouse.dx * MOUSE_SENS);
-  mouse.y = clamp1(py - mouse.dy * MOUSE_SENS); // mouse up (negative dy) = overhead
+  mouse.x = clamp1(px + mouse.dx * sens);
+  mouse.y = clamp1(py - mouse.dy * sens); // mouse up (negative dy) = overhead
   mouse.dx = mouse.dy = 0;
 
   // Priority order if several are held at once.
-  const buttons: [string, ShotType][] = [
-    [LMB, 'smash'],
-    [RMB, serving ? 'serveShort' : 'drop'],
-    ['ShiftLeft', serving ? 'serveLong' : 'clear'],
+  const buttons: [readonly string[], ShotType][] = [
+    [b.smash, 'smash'],
+    [b.drop, serving ? 'serveShort' : 'drop'],
+    [b.clear, serving ? 'serveLong' : 'clear'],
   ];
-  const active = buttons.find(([c]) => down.has(c));
-  const rel = buttons.find(([c]) => released.has(c));
-  const chargeCode = active?.[0] ?? rel?.[0];
+  const active = buttons.find(([c]) => anyIn(down, c));
+  const rel = buttons.find(([c]) => anyIn(released, c));
+  const chargeCodes = active?.[0] ?? rel?.[0];
 
   const intent: Intent = {
-    move: { x: axis('KeyA', 'KeyD'), z: axis('KeyW', 'KeyS') },
+    move: { x: axis(b.left, b.right), z: axis(b.up, b.down) },
     racket: { x: mouse.x, y: mouse.y },
     racketVel: dt > 0 ? { x: (mouse.x - px) / dt, y: (mouse.y - py) / dt } : { x: 0, y: 0 },
     charging: active?.[1] ?? null,
-    chargeTime: chargeCode ? held[chargeCode] ?? 0 : 0,
+    chargeTime: chargeCodes ? heldOf(chargeCodes) : 0,
     release: rel?.[1] ?? null,
-    basicSwing: pressed.has('KeyQ') ? 'backhand' : pressed.has('KeyE') ? 'forehand' : null,
-    jumpCharge: down.has('Space') ? held['Space'] ?? 0 : 0,
-    jumpRelease: released.has('Space'),
-    dive: pressed.has('KeyC'),
-    netShot: pressed.has('AltLeft') || pressed.has('AltRight'),
+    basicSwing: anyIn(pressed, b.backhand) ? 'backhand' : anyIn(pressed, b.forehand) ? 'forehand' : null,
+    jumpCharge: anyIn(down, b.jump) ? heldOf(b.jump) : 0,
+    jumpRelease: anyIn(released, b.jump),
+    dive: anyIn(pressed, b.dive),
+    netShot: anyIn(pressed, b.net),
   };
 
   for (const c of released) delete held[c];

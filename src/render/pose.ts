@@ -572,7 +572,7 @@ export interface CameraPresetSpec {
 // top is 0.78 everywhere: the scoreboard HUD covers the top ~10% of the view (NDC y > 0.8).
 export const CAMERA_PRESET_SPECS: Record<'behindHigh' | 'behindLow' | 'broadcast', CameraPresetSpec> = {
   behindHigh: { pitchDeg: 35, top: 0.78, bottom: 0.88, halfSpan: 6.2 },
-  behindLow: { pitchDeg: 22, top: 0.78, bottom: 0.95, halfSpan: 3.6 },
+  behindLow: { pitchDeg: 22, top: 0.78, bottom: 0.95, halfSpan: 4.7 },
   broadcast: { pitchDeg: 45, top: 0.78, bottom: 0.55, halfSpan: 6.2 },
 };
 

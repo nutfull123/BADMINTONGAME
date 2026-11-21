@@ -917,6 +917,7 @@ export function showCharacters(
   save: SaveData,
   onSaveChange: (next: SaveData) => boolean,
   onBackToMenu: () => void,
+  onHome: () => void,
 ): void {
   const { overlay, panel } = mountOverlay(root);
   const notice = createStorageNotice(overlay);
@@ -952,7 +953,18 @@ export function showCharacters(
       });
       headerBar.append(title, backBtn);
     } else {
-      headerBar.appendChild(title);
+      // No character yet: always offer a way back to Home, even when the save cannot be written, so
+      // a blocked-storage browser is not trapped in character creation.
+      const homeBtn = document.createElement('button');
+      homeBtn.type = 'button';
+      homeBtn.className = 'bm-btn bm-btn-sm';
+      homeBtn.dataset.testid = 'characters-back-home';
+      homeBtn.textContent = '← กลับหน้าแรก (Home)';
+      homeBtn.addEventListener('click', () => {
+        overlay.remove();
+        onHome();
+      });
+      headerBar.append(title, homeBtn);
     }
     panel.appendChild(headerBar);
 

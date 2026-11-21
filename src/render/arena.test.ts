@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
 import {
   AD_BRANDS,
   ARENA_ASSETS,
@@ -10,6 +11,7 @@ import {
   buildStandSeats,
   computeSpectatorSwayY,
   computeSurfaceRepeat,
+  configureTiledTexture,
   shouldUpdateSway,
   spectatorCountForQuality,
 } from './arena';
@@ -206,5 +208,18 @@ describe('arena pure layout & quality helpers', () => {
     expect(ARENA_ASSETS.woodRough).toBe('/assets/textures/wooden_floor_01_rough_1k.jpg');
     expect(ARENA_ASSETS.matNor).toBe('/assets/textures/linoleum_brown_nor_gl_1k.jpg');
     expect(ARENA_ASSETS.matRough).toBe('/assets/textures/linoleum_brown_rough_1k.jpg');
+  });
+
+  it('configures tiled texture wrap, repeat, colorSpace and anisotropy without bumping version (needsUpdate)', () => {
+    const tex = new THREE.Texture();
+    expect(tex.version).toBe(0);
+    configureTiledTexture(tex, { x: 15, y: 22 }, true, 8);
+    expect(tex.wrapS).toBe(THREE.RepeatWrapping);
+    expect(tex.wrapT).toBe(THREE.RepeatWrapping);
+    expect(tex.repeat.x).toBe(15);
+    expect(tex.repeat.y).toBe(22);
+    expect(tex.colorSpace).toBe(THREE.SRGBColorSpace);
+    expect(tex.anisotropy).toBe(8);
+    expect(tex.version).toBe(0);
   });
 });

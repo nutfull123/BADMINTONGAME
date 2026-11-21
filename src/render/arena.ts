@@ -54,6 +54,24 @@ export function computeSurfaceRepeat(widthMeters: number, lengthMeters: number, 
   };
 }
 
+/**
+ * Configures tiling, colour space and anisotropy on a texture without setting `needsUpdate = true`
+ * (TextureLoader marks `needsUpdate` itself once the image data actually arrives).
+ */
+export function configureTiledTexture(
+  tex: THREE.Texture,
+  repeat: { x: number; y: number },
+  isColor: boolean,
+  anisotropy: number,
+): THREE.Texture {
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(repeat.x, repeat.y);
+  tex.colorSpace = isColor ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  tex.anisotropy = anisotropy;
+  return tex;
+}
+
 export type StandSide = 'west' | 'east' | 'far';
 
 export interface StandSeat {
@@ -611,13 +629,15 @@ export function createArena(scene: THREE.Scene, renderer: THREE.WebGLRenderer): 
   const SWAY_INTERVAL = 0.22; // < 5 matrix updates per second (4.54 Hz)
   let disposed = false;
 
-  // Lazy-loaded PBR surface textures & HDRI (only loaded on medium / high quality)
+  // Lazy-loaded PBR surface textures & HDRI (only loaded on medium / high quality).
+  // Each texture is assigned to its material ONLY inside its load callback once image data has arrived,
+  // so an unloaded or failed file never sits on a material without image data.
   interface LoadedSurfaceTextures {
-    woodDiff: THREE.Texture;
-    woodNor: THREE.Texture;
-    woodRough: THREE.Texture;
-    matNor: THREE.Texture;
-    matRough: THREE.Texture;
+    woodDiff: THREE.Texture | null;
+    woodNor: THREE.Texture | null;
+    woodRough: THREE.Texture | null;
+    matNor: THREE.Texture | null;
+    matRough: THREE.Texture | null;
     all: THREE.Texture[];
   }
   let surfaceTextures: LoadedSurfaceTextures | null = null;
@@ -631,66 +651,100 @@ export function createArena(scene: THREE.Scene, renderer: THREE.WebGLRenderer): 
     }
   }
 
-  function configureTiledTexture(
-    tex: THREE.Texture,
-    repeat: { x: number; y: number },
-    isColor: boolean,
-    anisotropy: number,
-  ): THREE.Texture {
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(repeat.x, repeat.y);
-    tex.colorSpace = isColor ? THREE.SRGBColorSpace : THREE.NoColorSpace;
-    tex.anisotropy = anisotropy;
-    tex.needsUpdate = true;
-    return tex;
+  function syncLoadedMapsToMaterials(): void {
+    if (currentQuality === 'low' || !surfaceTextures) {
+      if (floorMat.map || floorMat.normalMap || floorMat.roughnessMap) {
+        floorMat.map = null;
+        floorMat.normalMap = null;
+        floorMat.roughnessMap = null;
+        floorMat.needsUpdate = true;
+      }
+      if (courtMatMaterial.normalMap || courtMatMaterial.roughnessMap) {
+        courtMatMaterial.normalMap = null;
+        courtMatMaterial.roughnessMap = null;
+        courtMatMaterial.needsUpdate = true;
+      }
+      return;
+    }
+
+    if (
+      floorMat.map !== surfaceTextures.woodDiff ||
+      floorMat.normalMap !== surfaceTextures.woodNor ||
+      floorMat.roughnessMap !== surfaceTextures.woodRough
+    ) {
+      floorMat.map = surfaceTextures.woodDiff;
+      floorMat.normalMap = surfaceTextures.woodNor;
+      floorMat.roughnessMap = surfaceTextures.woodRough;
+      floorMat.needsUpdate = true;
+    }
+
+    if (
+      courtMatMaterial.normalMap !== surfaceTextures.matNor ||
+      courtMatMaterial.roughnessMap !== surfaceTextures.matRough
+    ) {
+      courtMatMaterial.normalMap = surfaceTextures.matNor;
+      courtMatMaterial.roughnessMap = surfaceTextures.matRough;
+      courtMatMaterial.needsUpdate = true;
+    }
   }
 
   function ensureHighOrMediumAssets(q: GraphicsQuality): void {
     const aniso = anisotropyForQuality(q, maxHwAnisotropy());
 
     if (!surfaceTextures) {
+      const store: LoadedSurfaceTextures = {
+        woodDiff: null,
+        woodNor: null,
+        woodRough: null,
+        matNor: null,
+        matRough: null,
+        all: [],
+      };
+      surfaceTextures = store;
+
       const loader = new THREE.TextureLoader();
       const floorRep = computeSurfaceRepeat(floorW, floorL, 2);
       const matRep = computeSurfaceRepeat(matW, matL, 2);
 
-      const loadMap = (url: string, rep: { x: number; y: number }, isColor: boolean): THREE.Texture => {
+      const loadMap = (
+        url: string,
+        rep: { x: number; y: number },
+        isColor: boolean,
+        slot: 'woodDiff' | 'woodNor' | 'woodRough' | 'matNor' | 'matRough',
+      ): void => {
         const tex = loader.load(
           url,
-          () => {
+          (loaded) => {
             if (disposed) {
-              tex.dispose();
+              loaded.dispose();
               return;
             }
-            tex.anisotropy = anisotropyForQuality(currentQuality, maxHwAnisotropy());
-            tex.needsUpdate = true;
+            configureTiledTexture(
+              loaded,
+              rep,
+              isColor,
+              anisotropyForQuality(currentQuality, maxHwAnisotropy()),
+            );
+            store[slot] = loaded;
+            syncLoadedMapsToMaterials();
           },
           undefined,
           (err) => {
             console.warn(`Failed to load arena texture ${url}:`, err);
           },
         );
-        return configureTiledTexture(tex, rep, isColor, aniso);
+        configureTiledTexture(tex, rep, isColor, aniso);
+        store.all.push(tex);
       };
 
-      const woodDiff = loadMap(ARENA_ASSETS.woodDiff, floorRep, true);
-      const woodNor = loadMap(ARENA_ASSETS.woodNor, floorRep, false);
-      const woodRough = loadMap(ARENA_ASSETS.woodRough, floorRep, false);
-      const matNor = loadMap(ARENA_ASSETS.matNor, matRep, false);
-      const matRough = loadMap(ARENA_ASSETS.matRough, matRep, false);
-
-      surfaceTextures = {
-        woodDiff,
-        woodNor,
-        woodRough,
-        matNor,
-        matRough,
-        all: [woodDiff, woodNor, woodRough, matNor, matRough],
-      };
+      loadMap(ARENA_ASSETS.woodDiff, floorRep, true, 'woodDiff');
+      loadMap(ARENA_ASSETS.woodNor, floorRep, false, 'woodNor');
+      loadMap(ARENA_ASSETS.woodRough, floorRep, false, 'woodRough');
+      loadMap(ARENA_ASSETS.matNor, matRep, false, 'matNor');
+      loadMap(ARENA_ASSETS.matRough, matRep, false, 'matRough');
     } else {
       for (const tex of surfaceTextures.all) {
         tex.anisotropy = aniso;
-        tex.needsUpdate = true;
       }
     }
 
@@ -728,36 +782,10 @@ export function createArena(scene: THREE.Scene, renderer: THREE.WebGLRenderer): 
   }
 
   function applySurfaceMaterials(q: GraphicsQuality): void {
-    if (q === 'low') {
-      // Low quality: plain colours only, no textures
-      if (floorMat.map || floorMat.normalMap || floorMat.roughnessMap) {
-        floorMat.map = null;
-        floorMat.normalMap = null;
-        floorMat.roughnessMap = null;
-        floorMat.needsUpdate = true;
-      }
-      if (courtMatMaterial.normalMap || courtMatMaterial.roughnessMap) {
-        courtMatMaterial.normalMap = null;
-        courtMatMaterial.roughnessMap = null;
-        courtMatMaterial.needsUpdate = true;
-      }
-      return;
+    if (q !== 'low') {
+      ensureHighOrMediumAssets(q);
     }
-
-    ensureHighOrMediumAssets(q);
-    if (surfaceTextures) {
-      if (floorMat.map !== surfaceTextures.woodDiff) {
-        floorMat.map = surfaceTextures.woodDiff;
-        floorMat.normalMap = surfaceTextures.woodNor;
-        floorMat.roughnessMap = surfaceTextures.woodRough;
-        floorMat.needsUpdate = true;
-      }
-      if (courtMatMaterial.normalMap !== surfaceTextures.matNor) {
-        courtMatMaterial.normalMap = surfaceTextures.matNor;
-        courtMatMaterial.roughnessMap = surfaceTextures.matRough;
-        courtMatMaterial.needsUpdate = true;
-      }
-    }
+    syncLoadedMapsToMaterials();
   }
 
   function setQuality(q: GraphicsQuality): void {

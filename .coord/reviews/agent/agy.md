@@ -1,14 +1,15 @@
-# Cross-review: agy branch (14d3913) — V3 textures and HDRI — by Sonnet
+# Cross-review round 2: agy branch (fd03240) — V3 textures and HDRI — by Sonnet
 
 ## Standards
-- Scope OK: only src/render/arena.ts and src/render/arena.test.ts; HDRLoader ships with three; no new dependencies.
-- src/render/arena.ts:~650-690 (configureTiledTexture, else branch of ensureHighOrMediumAssets) — HARD — `tex.needsUpdate = true` on textures with no image yet, assigned to materials at once: three logs "Texture marked for update but no image data found" every frame until the file arrives, forever if a file fails; the else branch also re-uploads loaded textures on every setQuality — drop those needsUpdate lines (TextureLoader sets it on load) or assign maps only in the load callbacks.
-- JUDGEMENT — HALL_FLOOR_COLOR tint on the wood map keeps the floor darker, not asserted against the mat with the texture; acceptable.
+- Scope OK: only src/render/arena.ts and src/render/arena.test.ts; no new dependencies. No HARD issues.
+- src/render/arena.ts:~790 — JUDGEMENT — each loaded map sets material.needsUpdate, so up to 5 recompiles at startup (once per map, not per frame).
+- src/render/arena.ts:~655 — JUDGEMENT — store/slot structure slightly verbose; leave it.
 
 ## Spec
-- Wood maps at ~2 m per tile, tinted: OK. Linoleum normal/roughness on the green mat: OK (court lines untouched by this diff). gym_01 HDRI through PMREM as scene.environment with RoomEnvironment fallback and console.warn: OK. Low quality loads nothing: OK. Anisotropy per quality: OK. Async: OK except the warning bug. dispose frees all textures and targets, late loads freed: OK.
+- Round 1 HARD fixed: maps assigned only in load callbacks; configureTiledTexture no longer marks needsUpdate (tested); setQuality only marks a material when its map changes; a failed file warns once and keeps the plain material.
+- All V3 items met: wood maps tiled every 2 m and tinted darker than the mat; linoleum normal/roughness on the green mat; gym_01 HDRI via HDRLoader + PMREM with RoomEnvironment fallback; low loads nothing; anisotropy per quality; async; dispose frees everything incl. late loads.
 
 ## Checks
-- vitest 259 pass, tsc clean, vite build pass (at 14d3913).
+- vitest 260 pass, tsc clean, vite build pass (at fd03240).
 
-CHANGES
+APPROVE fd03240

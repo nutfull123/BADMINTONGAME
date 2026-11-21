@@ -349,3 +349,33 @@ describe('camera presets and quality', () => {
     expect(pixelRatioFor('high', 1.25)).toBe(1.25);
   });
 });
+
+import { shoulderFraming, SHOULDER_BACK, SHOULDER_RIGHT, SHOULDER_UP } from './pose';
+
+describe('shoulderFraming', () => {
+  const feet = { x: 1, y: 0, z: 3.5 };
+  it('sits behind, right of and above the player when facing the net', () => {
+    const f = shoulderFraming(feet, 1.78, 0, 0);
+    expect(f.pos.z - feet.z).toBeCloseTo(SHOULDER_BACK); // behind = toward the near baseline
+    expect(f.pos.x - feet.x).toBeCloseTo(SHOULDER_RIGHT);
+    expect(f.pos.y).toBeCloseTo(1.78 + SHOULDER_UP);
+    expect(f.dir.x).toBeCloseTo(0);
+    expect(f.dir.y).toBeCloseTo(0);
+    expect(f.dir.z).toBeCloseTo(-1);
+  });
+  it('looks along yaw/pitch and the camera follows the turn', () => {
+    const f = shoulderFraming(feet, 1.78, Math.PI / 2, 0.5);
+    expect(Math.hypot(f.dir.x, f.dir.y, f.dir.z)).toBeCloseTo(1);
+    expect(f.dir.y).toBeCloseTo(Math.sin(0.5));
+    expect(f.dir.x).toBeGreaterThan(0.8); // turned right: forward is +x
+    expect(f.pos.x).toBeLessThan(feet.x); // so the camera is behind, at -x
+    expect(f.pos.z - feet.z).toBeCloseTo(SHOULDER_RIGHT); // and the shoulder offset is toward +z
+    expect(f.lookAt.x - f.pos.x).toBeCloseTo(f.dir.x);
+  });
+  it('zoom comes closer, distance offset goes farther, height offset goes higher', () => {
+    const base = shoulderFraming(feet, 1.78, 0, 0);
+    expect(shoulderFraming(feet, 1.78, 0, 0, 1.5).pos.z).toBeLessThan(base.pos.z);
+    expect(shoulderFraming(feet, 1.78, 0, 0, 1, 0, 1).pos.z).toBeGreaterThan(base.pos.z);
+    expect(shoulderFraming(feet, 1.78, 0, 0, 1, 1, 0).pos.y).toBeGreaterThan(base.pos.y);
+  });
+});

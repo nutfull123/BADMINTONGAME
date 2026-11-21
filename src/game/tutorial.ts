@@ -6,7 +6,7 @@ import { createRenderer } from '../render';
 import { predictLanding, stepShuttle } from '../physics';
 import { FORMAT_3X15, createMatch } from '../rules';
 import { chargeLevel, createPlayer, recoverBetweenPoints, stepPlayer, validateStats } from '../sim';
-import { aimView, applyAssist } from '../sim/assist';
+import { aimView, applyAssist, racketFromAim } from '../sim/assist';
 import { ASSIST_GAME_SPEED, SERVE_MAX_CONTACT } from '../sim/tuning';
 import { createHud, createViewControls, PRESETS, type Settings } from '../ui';
 import type { Intent, MatchState, PlayerState, ServiceCourt, ShuttleState, Stats, Vec3, WorldView } from '../types';
@@ -49,7 +49,9 @@ export function startTutorial(root: HTMLElement, setup: TutorialSetup, onAgain: 
   const renderer = createRenderer(container);
   renderer.setCamera(prefs.camera);
   renderer.setQuality(prefs.graphics.quality);
-  const input = createInput(container.querySelector('canvas')!, prefs.controls);
+  const input = createInput(container.querySelector('canvas')!, prefs.controls, prefs.camera.preset);
+  const look = input.look; // set in 'shoulder' mode only: the mouse turns the view and the crosshair aims the racket
+  let prevAim = { x: 0, y: 0 };
   const hud = createHud(root);
   const viewControls = createViewControls(root, (z) => renderer.setZoom(z));
   const hudMatch: MatchState = createMatch(FORMAT_3X15, 'near');
@@ -361,12 +363,22 @@ export function startTutorial(root: HTMLElement, setup: TutorialSetup, onAgain: 
     acc -= n * STEP;
     if (n > 0) {
       input.setServing(tut.current.id === 'serve' && stage === 'serve');
-      human = input.intent((n * STEP) / speed);
+      const realDt = (n * STEP) / speed;
+      human = input.intent(realDt);
+      if (look) { // crosshair aims the racket; its change per real second is the flick
+        const ray = renderer.aimRay();
+        const aim = racketFromAim(near, ray.origin, ray.dir);
+        human.racket = aim;
+        human.racketVel = { x: (aim.x - prevAim.x) / realDt, y: (aim.y - prevAim.y) / realDt };
+        prevAim = aim;
+      }
       for (let k = 0; k < n && !done; k++) tick(k === 0 ? human : dropEdges(human));
     }
     if (done) return;
     feedbackLeft = Math.max(0, feedbackLeft - dt);
+    const w = view();
     hud.update({
+      crosshair: look && !paused ? (w.aim?.onTarget ? 'target' : 'idle') : null,
       match: hudMatch,
       stamina: near.staminaNow,
       charge: human?.charging ? chargeLevel(near, human.chargeTime) : null,
@@ -376,7 +388,8 @@ export function startTutorial(root: HTMLElement, setup: TutorialSetup, onAgain: 
           ? feedback
           : instructionLine(),
     });
-    renderer.render(view(), dt);
+    if (look) renderer.setLook(look.yaw, look.pitch);
+    renderer.render(w, dt);
   }
 
   startDrill();

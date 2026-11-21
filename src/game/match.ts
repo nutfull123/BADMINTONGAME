@@ -4,7 +4,7 @@ import { createInput } from '../input';
 import { createRenderer } from '../render';
 import { FORMAT_3X15, FORMAT_3X21, awardRally, createMatch, serverSlot } from '../rules';
 import { chargeLevel, createPlayer, validateStats } from '../sim';
-import { aimView, applyAssist } from '../sim/assist';
+import { aimView, applyAssist, racketFromAim } from '../sim/assist';
 import { botIntent, createBot, type Bot } from '../sim/bot';
 import { ASSIST_GAME_SPEED } from '../sim/tuning';
 import { createHud, createViewControls, PRESETS, showResult, type Settings } from '../ui';
@@ -39,7 +39,9 @@ export function startMatch(root: HTMLElement, setup: MatchSetup, onAgain: () => 
   const renderer = createRenderer(container);
   renderer.setCamera(prefs.camera);
   renderer.setQuality(prefs.graphics.quality);
-  const input = createInput(container.querySelector('canvas')!, prefs.controls);
+  const input = createInput(container.querySelector('canvas')!, prefs.controls, prefs.camera.preset);
+  const look = input.look; // set in 'shoulder' mode only: the mouse turns the view and the crosshair aims the racket
+  let prevAim = { x: 0, y: 0 };
   const hud = createHud(root);
   const viewControls = createViewControls(root, (z) => renderer.setZoom(z));
 
@@ -144,18 +146,29 @@ export function startMatch(root: HTMLElement, setup: MatchSetup, onAgain: () => 
     if (n > 0) {
       input.setServing(phase === 'between' ? match.server === 'near' && serverSlot(match) === 0 : humanServes());
       // one input read per frame: edges go to the first tick only, the flick velocity spans all of them
-      human = input.intent((n * STEP) / speed); // flick speed is per real second
+      const realDt = (n * STEP) / speed;
+      human = input.intent(realDt); // flick speed is per real second
+      if (look) { // crosshair aims the racket; its change per real second is the flick
+        const ray = renderer.aimRay();
+        const aim = racketFromAim(rally.players.near[0], ray.origin, ray.dir);
+        human.racket = aim;
+        human.racketVel = { x: (aim.x - prevAim.x) / realDt, y: (aim.y - prevAim.y) / realDt };
+        prevAim = aim;
+      }
       for (let k = 0; k < n && !done; k++) tick(k === 0 ? human : dropEdges(human));
     }
     if (done) return;
     noticeLeft = Math.max(0, noticeLeft - dt);
+    const w = view();
     hud.update({
+      crosshair: look && !paused && phase === 'play' ? (w.aim?.onTarget ? 'target' : 'idle') : null,
       match: { ...match, intervalNow: phase === 'between' && match.intervalNow },
       stamina: rally.players.near[0].staminaNow,
       charge: human?.charging ? chargeLevel(rally.players.near[0], human.chargeTime) : null,
       message: paused ? 'Click to play' : phase === 'between' ? message : noticeLeft > 0 ? notice : null,
     });
-    renderer.render(view(), dt);
+    if (look) renderer.setLook(look.yaw, look.pitch);
+    renderer.render(w, dt);
   }
 
   raf = requestAnimationFrame(frame);

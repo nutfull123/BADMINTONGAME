@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { aimView, applyAssist, autoRacket, moveToward, racketInputFor } from './assist';
+import { aimReach, aimView, applyAssist, autoRacket, moveToward, racketFromAim, racketInputFor, reachCentre } from './assist';
 import { createPlayer, racketHeadFor, stepPlayer } from './index';
 import { predictLanding, stepShuttle } from '../physics';
 import type { Intent, ShuttleState, Stats } from '../types';
@@ -91,5 +91,35 @@ describe('assist', () => {
     const n = applyAssist(i, p, incoming, 'normal');
     expect(n.move).toEqual(i.move);
     expect(n.racket).toEqual(autoRacket(p, incoming));
+  });
+});
+
+describe('racketFromAim', () => {
+  const p = createPlayer(stats, 'near', { x: 0, y: 0, z: 3.5 });
+  const c = reachCentre(p);
+  const down = { x: 0, y: 0, z: -1 };
+
+  it('a ray whose closest point is inside reach gives racketInputFor at that point', () => {
+    const point = { x: 0.5, y: c.y + 0.4, z: c.z }; // ray runs along -z through this point
+    const r = racketFromAim(p, { x: 0.5, y: c.y + 0.4, z: 6 }, down);
+    expect(r).toEqual(racketInputFor(p, point));
+  });
+
+  it('aiming right gives x > 0, left x < 0, up y > 0, down y < 0 for a near-side player', () => {
+    expect(racketFromAim(p, { x: 0.7, y: c.y, z: 6 }, down).x).toBeGreaterThan(0);
+    expect(racketFromAim(p, { x: -0.7, y: c.y, z: 6 }, down).x).toBeLessThan(0);
+    expect(racketFromAim(p, { x: 0, y: c.y + 0.7, z: 6 }, down).y).toBeGreaterThan(0);
+    expect(racketFromAim(p, { x: 0, y: c.y - 0.7, z: 6 }, down).y).toBeLessThan(0);
+  });
+
+  it('a far-away aim is pulled back to the reach distance', () => {
+    const r = racketFromAim(p, { x: 10, y: c.y, z: 6 }, down);
+    expect(r).toEqual(racketInputFor(p, { x: c.x + aimReach(p), y: c.y, z: c.z }));
+  });
+
+  it('works for the far side too (own right = world -x)', () => {
+    const f = createPlayer(stats, 'far', { x: 0, y: 0, z: -3.5 });
+    const fc = reachCentre(f);
+    expect(racketFromAim(f, { x: -0.7, y: fc.y, z: -6 }, { x: 0, y: 0, z: 1 }).x).toBeGreaterThan(0);
   });
 });

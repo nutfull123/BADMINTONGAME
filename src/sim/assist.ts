@@ -19,6 +19,23 @@ export function racketInputFor(p: PlayerState, target: Vec3): { x: number; y: nu
   };
 }
 
+// The racket reaches about this far from the shoulder (sideways reach plus a bit of forward and vertical play).
+const AIM_REACH_EXTRA = 0.3;
+const SHOULDER_FACTOR = 0.82; // shoulder height as a fraction of body height
+export const reachCentre = (p: PlayerState): Vec3 => ({ x: p.pos.x, y: p.pos.y + T.heightOf(p.stats) * SHOULDER_FACTOR, z: p.pos.z });
+export const aimReach = (p: PlayerState): number =>
+  T.REACH_LATERAL_BASE + T.REACH_LATERAL_PER_M * (T.heightOf(p.stats) - T.HEIGHT_REF) + AIM_REACH_EXTRA;
+
+// FPS-style aim: the point on the camera ray closest to the reach centre, pulled back to the reach if it is farther.
+// With the crosshair on the shuttle and the shuttle in reach, the racket head ends up at (or right next to) the shuttle.
+export function racketFromAim(p: PlayerState, origin: Vec3, dir: Vec3): { x: number; y: number } {
+  const c = reachCentre(p);
+  const t = Math.max(0, (c.x - origin.x) * dir.x + (c.y - origin.y) * dir.y + (c.z - origin.z) * dir.z);
+  const px = origin.x + dir.x * t - c.x, py = origin.y + dir.y * t - c.y, pz = origin.z + dir.z * t - c.z;
+  const k = Math.min(1, aimReach(p) / (Math.hypot(px, py, pz) || 1));
+  return racketInputFor(p, { x: c.x + px * k, y: c.y + py * k, z: c.z + pz * k });
+}
+
 const incoming = (p: PlayerState, s: ShuttleState) => sgnOf(p.side) * s.vel.z > T.ASSIST_INCOMING_SPEED;
 
 // Where the incoming shuttle crosses the racket plane (stepShuttle look-ahead), null when nothing is coming.

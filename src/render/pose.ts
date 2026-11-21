@@ -596,7 +596,7 @@ export function computePresetFraming(
   camX = 0,
   zoom = 1,
 ): CameraFraming {
-  // shortcut: 'shoulder' frames like behindHigh until the mouse-look camera (task F1) replaces it
+  // 'shoulder' is framed by shoulderFraming; behindHigh here only keeps the type total
   const spec = setup.preset === 'shoulder' ? CAMERA_PRESET_SPECS.behindHigh : CAMERA_PRESET_SPECS[setup.preset];
   const tanV = Math.tan(((fovDeg * Math.PI) / 180) * 0.5);
   const tanH = tanV * Math.max(0.5, aspect || 16 / 9);
@@ -638,6 +638,32 @@ export function computePresetFraming(
     pos: { x: followX, y: lookY + (cy - lookY) * distScale, z: lookZ + (cz - lookZ) * distScale },
     lookAt: { x: followX, y: lookY, z: lookZ },
   };
+}
+
+export const SHOULDER_BACK = 2.6;  // m behind the player
+export const SHOULDER_RIGHT = 0.45; // m to the player's right
+export const SHOULDER_UP = 0.35;    // m above the head
+export const SHOULDER_HEIGHT_STEP = 1;     // m of camera height per 1.0 of the height offset
+export const SHOULDER_DISTANCE_STEP = 1.5; // m of camera distance per 1.0 of the distance offset
+
+export interface ShoulderFraming extends CameraFraming { dir: Vec3 } // dir = unit forward
+
+// Over-the-right-shoulder camera for the FPS-style 'shoulder' preset. `feet` is the (smoothed) player position,
+// yaw 0 = facing the net (yaw > 0 turns right), pitch > 0 looks up. Turns with yaw/pitch directly; zoom > 1 comes closer.
+export function shoulderFraming(
+  feet: Vec3, bodyHeight: number, yaw: number, pitch: number, zoom = 1, height = 0, distance = 0,
+  out: ShoulderFraming = { pos: { x: 0, y: 0, z: 0 }, lookAt: { x: 0, y: 0, z: 0 }, dir: { x: 0, y: 0, z: 0 } },
+): ShoulderFraming {
+  const sy = Math.sin(yaw), cy = Math.cos(yaw), cp = Math.cos(pitch);
+  const h = clamp(Number.isFinite(height) ? height : 0, -1, 1);
+  const d = clamp(Number.isFinite(distance) ? distance : 0, -1, 1);
+  const back = Math.max(0.6, (SHOULDER_BACK + d * SHOULDER_DISTANCE_STEP) / clampZoom(zoom));
+  out.dir.x = sy * cp; out.dir.y = Math.sin(pitch); out.dir.z = -cy * cp;
+  out.pos.x = feet.x + cy * SHOULDER_RIGHT - sy * back; // right = (cos, 0, sin), flat forward = (sin, 0, -cos)
+  out.pos.y = feet.y + bodyHeight + SHOULDER_UP + h * SHOULDER_HEIGHT_STEP;
+  out.pos.z = feet.z + sy * SHOULDER_RIGHT + cy * back;
+  out.lookAt.x = out.pos.x + out.dir.x; out.lookAt.y = out.pos.y + out.dir.y; out.lookAt.z = out.pos.z + out.dir.z;
+  return out;
 }
 
 // low = 1, medium = up to 1.5, high = device pixel ratio capped at 2.

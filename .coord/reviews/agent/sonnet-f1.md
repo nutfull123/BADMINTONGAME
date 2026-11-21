@@ -1,18 +1,32 @@
-# Cross-Review: `agent/sonnet-f1` (`d821c96` vs `main`)
+# Cross-Review: `agent/sonnet-F1` (`1500773`)
 
 ## Standards
-src/sim/index.ts:348 - JUDGEMENT - Literal `0.3` in `spd > 0.3` instead of reusing `T.MOVING_SPEED` (which is already `0.3` in `src/sim/tuning.ts:24`) - Every new footwork number (`FOOTWORK_RECOVERY_SPAN`, `SPLIT_*`, `CHASSE_*`, `CROSSOVER_*`, `LUNGE_*`, `RECOVER_TIME`) is in `src/sim/tuning.ts:153-169` with a one-line comment; line 348 repeats the existing `0.3` moving-speed threshold inline.
-src/sim/index.ts:33 - JUDGEMENT - Data Clumps / Divergent Change on `SimPlayer` and `stepPlayer` - `SimPlayer` adds 9 flat optional footwork fields (`fw`, `fwCycle`, `fwIncoming`, `splitT`, `splitDur`, `boostT`, `lungeT`, `lungeDur`, `recoverT`) and `stepPlayer` updates the footwork state machine inline alongside movement, stamina, dive, and swing collision.
-src/ui/index.ts:985 - JUDGEMENT - Duplicated Code on zoom clamping constants - `ZOOM_MIN`, `ZOOM_MAX`, and `clampZoom` in `src/ui/index.ts:985-990` duplicate the zoom clamping range used by `src/render/pose.ts`.
+- Scope check (`git diff main...agent/sonnet-F1`): Only `src/input/**` (`index.ts`, `intent.ts`, `intent.test.ts`), `src/sim/assist.ts`, `src/sim/assist.test.ts`, `src/render/index.ts`, `src/render/pose.ts`, `src/render/pose.test.ts`, `src/game/match.ts`, `src/game/tutorial.ts`, and `src/ui/hud.ts` were touched. `src/types.ts`, `src/render/arena.ts`, `src/render/equipment.ts`, `src/app/`, `src/ui/pages/`, and `package.json` were untouched. No new dependencies were added, and `src/render/index.ts` reuses pre-allocated `shFeet`, `shFrame`, and `aimOut` objects without per-frame allocations.
+- `src/game/match.ts:151-157` & `src/game/tutorial.ts:368-374` - JUDGEMENT - Duplicated Code between `match.ts` and `tutorial.ts` for applying `racketFromAim` and computing `racketVel` from `prevAim` - pre-existing loop duplication between match and tutorial modes; acceptable here since both files are small and follow the exact same frame structure.
+- `src/render/pose.ts:653-656` - JUDGEMENT - Long Parameter List in `shoulderFraming(feet, bodyHeight, yaw, pitch, zoom, height, distance, out)` (8 parameters, 4 with defaults) - clear and allocation-free via the optional `out` parameter.
 
 ## Spec
-src/game/match.ts:40 - JUDGEMENT - Redundant cast `(renderer as { setZoom?: (z: number) => void }).setZoom?.(z)` (also in `src/game/tutorial.ts:50`) - Brief (`f1.md:26`) instructed `f1` to call `renderer.setZoom?.(z)` defensively while `render` added `setZoom` in parallel; once `render` with `setZoom` is on `main`, the cast can be simplified to `renderer.setZoom(z)`.
-src/sim/index.ts:156 - JUDGEMENT - Split-step boost check `splitDur <= T.SPLIT_WINDOW` depends purely on `stats.recovery` (`splitDur = T.SPLIT_HOP_TIME * recMul`) rather than a separate human input timing - Brief (`f1.md:16`) says "If the player is on the ground and not already moving fast, they split-step; landing within a short window after the opponent's contact gives a reaction boost... Stats: recovery shortens the hop." Because the hop triggers automatically on opponent contact, whether it lands within `SPLIT_WINDOW` (0.32 s) after contact is determined by whether the player wasn't already moving fast (skipped split) and has sufficient recovery stat (`recovery >= 4`).
+- **1. Input mouse look & yaw-relative movement (`src/input/intent.ts:7-13,34-43,62-81`, `src/input/index.ts:10-13,61-62`)**: PASS.
+  - When `preset === 'shoulder'`, `createInput` creates a `look` state and passes it to `buildIntent`.
+  - When `look` is present and the pointer is locked, mouse deltas call `stepLook(look, mouse.dx, mouse.dy, LOOK_SENS * controls.mouseSensitivity)` instead of moving `mouse.x`/`mouse.y`.
+  - Yaw is clamped to `±YAW_LIMIT` (`±100°` from facing the net) and pitch to `PITCH_MIN..PITCH_MAX` (`-15°..+70°`, up = positive).
+  - Movement keys are rotated by `moveRelativeToYaw({ x: axis(b.left, b.right), z: axis(b.up, b.down) }, look.yaw)`, resolving forward/sideways relative to view yaw into court axes in `Intent.move`.
+- **2. Shoulder camera, `setLook`, `aimRay`, and `shoulderFraming` (`src/render/pose.ts:643-667`, `src/render/index.ts:576-597,636-657,774`)**: PASS.
+  - `shoulderFraming` places the camera behind the player's right shoulder (`SHOULDER_BACK = 2.6 m`, `SHOULDER_RIGHT = 0.45 m`, `SHOULDER_UP = 0.35 m` above head height), applies height (`SHOULDER_HEIGHT_STEP = 1`) and distance (`SHOULDER_DISTANCE_STEP = 1.5`) offsets and `1 / clampZoom(zoom)`, and computes `dir` and `lookAt` directly from `yaw`/`pitch`.
+  - In `src/render/index.ts`, `shFeet` smoothly follows `near.pos` (`1 - Math.exp(-CAM_FOLLOW * dt)`, snapping on first frame via `shFollowed`), while `lookYaw`/`lookPitch` turn immediately without lag.
+  - `createRenderer` exposes `setLook(yaw, pitch)` and `aimRay(): { origin: Vec3; dir: Vec3 }`.
+- **3. Pure `racketFromAim` (`src/sim/assist.ts:23-37`)**: PASS.
+  - Projects `reachCentre(p)` (`p.pos.y + height * 0.82`) onto the ray `(origin, dir)` with `t = Math.max(0, ...)`, clamps the offset from `reachCentre(p)` to `aimReach(p)`, and returns `racketInputFor(p, clampedPoint)`.
+- **4. Match & tutorial integration (`src/game/match.ts:42-44,151-157,164,170`, `src/game/tutorial.ts:52-54,368-374,381,391`)**: PASS.
+  - Both `startMatch` and `startTutorial` pass `prefs.camera.preset` to `createInput`, override `human.racket` with `racketFromAim(..., ray.origin, ray.dir)` and `human.racketVel` with `(aim - prevAim) / realDt` when `look` is active, and call `renderer.setLook(look.yaw, look.pitch)` each frame.
+- **5. HUD crosshair (`src/ui/hud.ts:10,108-120`)**: PASS.
+  - Renders a centered `18×18 px` circular crosshair (`data-testid="crosshair"`), visible only when `crosshair` is `'idle'` or `'target'` (i.e. in `'shoulder'` mode while unpaused and playing), turning green (`#22c55e`) when `w.aim?.onTarget` is true (`'target'`) and white (`#fff`) otherwise.
+- **6. Unchanged behavior for other presets (`src/input/intent.ts:62-66,80-81`, `src/input/intent.test.ts:217-223`)**: PASS.
+  - When `look` is omitted (`behindLow`, `behindHigh`, `broadcast`), `buildIntent` behaves identically to before.
 
 ## Checks
-- `git diff --stat main...agent/sonnet-f1`: only `src/sim/footwork.ts`, `src/sim/footwork.test.ts`, `src/sim/index.ts`, `src/sim/tuning.ts`, `src/game/match.ts`, `src/game/tutorial.ts`, `src/ui/index.ts` touched (`src/types.ts`, `src/render/**`, `package.json` untouched; `src/sim/**` pure; `footwork.ts` signatures unchanged) — PASS
-- `npx vitest run`: 13 passed (146 tests) — PASS
-- `npx tsc --noEmit`: exit 0 — PASS
-- `npx vite build`: exit 0 (built in 222ms) — PASS
+- `npx vitest run` (in `/Users/knimf/BADMINTONGAME/.claude/worktrees/agent-ad5901cdb222d52f6`): PASS — 18 test files passed (237 tests).
+- `npx tsc --noEmit` (in `/Users/knimf/BADMINTONGAME/.claude/worktrees/agent-ad5901cdb222d52f6`): PASS — exit 0.
+- `npx vite build` (in `/Users/knimf/BADMINTONGAME/.claude/worktrees/agent-ad5901cdb222d52f6`): PASS — built in 272ms.
 
-APPROVE d821c96
+APPROVE 1500773

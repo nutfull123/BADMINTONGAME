@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   AD_BRANDS,
+  ARENA_ASSETS,
   COURT_MAT_COLOR,
   HALL_DIMENSIONS,
   HALL_FLOOR_COLOR,
+  anisotropyForQuality,
   buildAdBoardPlacements,
   buildStandSeats,
   computeSpectatorSwayY,
+  computeSurfaceRepeat,
   shouldUpdateSway,
   spectatorCountForQuality,
 } from './arena';
@@ -177,5 +180,31 @@ describe('arena pure layout & quality helpers', () => {
     expect(shouldUpdateSway(10.25, 10.0, 0.22)).toBe(true);
     // Restart: elapsed drops from 10.0 back to 0.05 -> must update immediately and reset timer
     expect(shouldUpdateSway(0.05, 10.0, 0.22)).toBe(true);
+  });
+
+  it('caps texture anisotropy by quality (low = 1, medium <= 4, high <= 8) and hardware max', () => {
+    expect(anisotropyForQuality('low', 16)).toBe(1);
+    expect(anisotropyForQuality('medium', 16)).toBe(4);
+    expect(anisotropyForQuality('high', 16)).toBe(8);
+    expect(anisotropyForQuality('high', 2)).toBe(2);
+    expect(anisotropyForQuality('medium', 2)).toBe(2);
+  });
+
+  it('computes real-scale 2 m texture repeat counts and references the approved CC0 asset paths', () => {
+    const floorRepeat = computeSurfaceRepeat(HALL_DIMENSIONS.halfWidth * 2, HALL_DIMENSIONS.halfLength * 2, 2);
+    expect(floorRepeat).toEqual({ x: 15, y: 22 });
+
+    const matW = COURT.halfWidthDoubles * 2 + 1.8;
+    const matL = COURT.halfLength * 2 + 1.8;
+    const matRepeat = computeSurfaceRepeat(matW, matL, 2);
+    expect(matRepeat.x).toBeCloseTo(matW / 2, 3);
+    expect(matRepeat.y).toBeCloseTo(matL / 2, 3);
+
+    expect(ARENA_ASSETS.hdri).toBe('/assets/hdri/gym_01_1k.hdr');
+    expect(ARENA_ASSETS.woodDiff).toBe('/assets/textures/wooden_floor_01_diff_1k.jpg');
+    expect(ARENA_ASSETS.woodNor).toBe('/assets/textures/wooden_floor_01_nor_gl_1k.jpg');
+    expect(ARENA_ASSETS.woodRough).toBe('/assets/textures/wooden_floor_01_rough_1k.jpg');
+    expect(ARENA_ASSETS.matNor).toBe('/assets/textures/linoleum_brown_nor_gl_1k.jpg');
+    expect(ARENA_ASSETS.matRough).toBe('/assets/textures/linoleum_brown_rough_1k.jpg');
   });
 });

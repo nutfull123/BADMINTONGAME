@@ -26,8 +26,8 @@ reads the result.
    source links.
 2. Write: each agent edits only its claimed files in its own worktree and
    commits on its own branch.
-3. Cross-review (never review your own work): opencode → reviewed by Sonnet;
-   Sonnet → by opencode or agy; agy → by Sonnet. Reviewers do not edit code;
+3. Cross-review (never review your own work): opencode → reviewed by Sonnet or agy;
+   Sonnet → by opencode or agy; agy → by Sonnet or opencode (use opencode when Claude quota is tight). Reviewers do not edit code;
    they write `.coord/reviews/<branch>.md` (e.g. `.coord/reviews/agent/opencode.md`)
    as `file:line — problem — why`, ending with a last line of exactly
    `APPROVE <commit>` (the branch head they reviewed) or `CHANGES`. A hook

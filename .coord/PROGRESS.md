@@ -2,9 +2,11 @@
 
 ## In progress
 <!-- - [agent] task — files owned — started YYYY-MM-DD -->
-- [sonnet] Phase 3 V2b real racket + 16-feather shuttlecock — src/render/equipment.ts, src/render/equipment.test.ts — started 2026-11-21
+- [sonnet] F1 FPS mouse look (shoulder camera, crosshair aiming) — src/input/**, src/sim/assist.ts, src/render/index.ts, src/render/pose.ts, src/game/match.ts, src/game/tutorial.ts, src/ui/hud.ts — started 2026-11-22
 
 ## Done
+- [sonnet] Phase 3 V2b real racket (oval frame, string grid, T-joint, octagonal grip) + 16-feather shuttlecock; reviewed by agy — main 5122fcc — 2026-11-22
+- [agy] Phase 3 V2a indoor hall merged after 2 review rounds (Sonnet) — main b8a5bee — 2026-11-22
 - [agy] Phase 3 V2a indoor hall (stands, crowd, ad boards, lights, RoomEnvironment, quality) — src/render/arena.ts, src/render/arena.test.ts — 833179e — 2026-11-21
 - [claude] Phase 3 S0 render seam: hall floor/lights to arena.ts, racket/shuttle builders to equipment.ts, no behaviour change — main 723c30f — 2026-11-21
 - [all] Phase 2 app shell: contract + app model (claude), P2 pages (agy), P3 camera presets/quality/keys (sonnet), P2fix rebind/notice/blocked storage/hints + ui split (opencode); every branch cross-reviewed; checked in Chrome — main ba04cd4 — 2026-11-21

@@ -2,10 +2,10 @@
 
 ## In progress
 <!-- - [agent] task — files owned — started YYYY-MM-DD -->
-- [agy] P2 app shell pages — src/ui/**, src/game/index.ts — 2026-11-20
-- [sonnet] P3 camera presets, graphics, key bindings — src/render/**, src/input/**, src/game/match.ts, src/game/tutorial.ts — 2026-11-20
 
 ## Done
+- [all] Phase 2 app shell: contract + app model (claude), P2 pages (agy), P3 camera presets/quality/keys (sonnet), P2fix rebind/notice/blocked storage/hints + ui split (opencode); every branch cross-reviewed; checked in Chrome — main ba04cd4 — 2026-11-21
+- [opencode] P2fix app shell fixes: rebinding capture (one armed row, control clicks never bind), save-failure notice survives re-render, no-storage dead end (Home button + in-memory session save), Home hints from saved bindings, ui split into styles/overlay/widgets/pages — 7f9425d aa1f9c6 67eb253 51244db 7f7cce4 — 2026-11-21
 - [all] Phase 1 doubles + five events: contract (claude), D1 rules Law 11 (agy), D2 2v2 rally + teams (sonnet), D3 doubles bot (sonnet), D4 4 players + gender/event pickers (sonnet), L1 doubles long serve (claude), seeded bot tests (claude); every branch cross-reviewed — main cd49b27 — 2026-11-20
 - [all] Demo v1 complete: rules (opencode), physics/render/input/sim/game (Sonnet), ui/bot (agy), tutorial (opencode + Sonnet); every branch cross-reviewed; final Opus gate APPROVE — main e7911f7 — 2026-11-20
 
@@ -14,6 +14,8 @@
 - [claude] Lead session moved: old chat 31c33d33 (started in ~) continues in the BADMINTONGAME project session — 2026-11-20
 
 ## Follow-ups (from final review, not blocking)
+- Phase 2: "Click to play" pause message covers the human player; overlays lack role=dialog / live regions
+- Phase 2: low graphics still updates hidden shadow/trail buffers each frame; camera wiring duplicated in match.ts and tutorial.ts
 - Phase 1: HUD scoreboard covers the far back player at the top of the screen; far baseline sits under the HUD
 - Phase 1: bot long-serve flick aims for singles depth (landing is clamped correctly by sim; lateral aim only)
 - Phase 1: game/teams.ts imports PRESETS from ui/ (move presets to a pure module)

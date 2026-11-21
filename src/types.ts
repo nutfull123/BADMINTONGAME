@@ -161,7 +161,8 @@ export interface MatchSettings {
   event: MatchEvent;        // must fit the character's gender
 }
 
-export type CameraPreset = 'behindLow' | 'behindHigh' | 'broadcast';
+// 'shoulder': over-the-shoulder camera turned by the mouse like an FPS; the racket follows the screen-centre crosshair.
+export type CameraPreset = 'shoulder' | 'behindLow' | 'behindHigh' | 'broadcast';
 export interface CameraSettings {
   preset: CameraPreset;
   height: number;   // -1..1 offset from the preset's camera height

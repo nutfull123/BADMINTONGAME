@@ -47,6 +47,7 @@ export const ACTION_LABELS: Record<InputAction, string> = {
 };
 
 export const CAMERA_PRESET_LABELS: Record<CameraPreset, string> = {
+  shoulder: 'หลังไหล่ เล็งแบบ FPS',
   behindLow: 'หลังผู้เล่น มุมต่ำ',
   behindHigh: 'หลังผู้เล่น มุมสูง',
   broadcast: 'มุมถ่ายทอดสด',

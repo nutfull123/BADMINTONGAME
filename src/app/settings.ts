@@ -30,7 +30,7 @@ export const DEFAULT_KEYS: KeyBindings = deepFreeze({
 });
 
 export const DEFAULT_GAME_SETTINGS: GameSettings = deepFreeze({
-  camera: { preset: 'behindHigh', height: 0, distance: 0, zoom: 1, follow: true },
+  camera: { preset: 'shoulder', height: 0, distance: 0, zoom: 1, follow: true },
   controls: { mouseSensitivity: 1, keys: DEFAULT_KEYS },
   assists: { mode: 'easy', hitAssist: 70, landingMarker: true, timingRing: true, racketAid: true },
   graphics: { quality: 'high' },
@@ -45,7 +45,7 @@ export const LIMITS = {
   hitAssist: [0, 100],
 } as const satisfies Record<string, readonly [number, number]>;
 
-export const CAMERA_PRESETS: readonly CameraPreset[] = ['behindLow', 'behindHigh', 'broadcast'];
+export const CAMERA_PRESETS: readonly CameraPreset[] = ['shoulder', 'behindLow', 'behindHigh', 'broadcast'];
 export const GRAPHICS_QUALITIES: readonly GraphicsQuality[] = ['low', 'medium', 'high'];
 const MODES: readonly MatchSettings['mode'][] = ['easy', 'normal', 'pro', 'timing'];
 const EVENTS: readonly MatchEvent[] = ['MS', 'WS', 'MD', 'WD', 'XD'];

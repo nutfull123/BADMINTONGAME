@@ -1,7 +1,7 @@
 // Pure pose, footwork animation, two-bone IK, camera framing/zoom, landing-marker pulse and shuttle trail buffer math (no DOM, no WebGL/Three).
 import type { FootworkView } from '../sim/footwork';
 import { footworkOf } from '../sim/footwork';
-import type { BodyType, Gender, PlayerState, Side, Slot, Vec3 } from '../types';
+import type { BodyType, CameraPreset, Gender, PlayerState, Side, Slot, Vec3 } from '../types';
 
 export const BODY_HEIGHT: Record<BodyType, number> = {
   tall: 1.95,
@@ -581,7 +581,7 @@ export const CAMERA_DISTANCE_STEP = 3; // m of camera distance per 1.0 of the di
 const FAR_HEAD_Y = 1.95;
 
 export interface CameraSetup {
-  preset: keyof typeof CAMERA_PRESET_SPECS;
+  preset: CameraPreset;
   height: number;   // -1..1
   distance: number; // -1..1
 }
@@ -596,7 +596,8 @@ export function computePresetFraming(
   camX = 0,
   zoom = 1,
 ): CameraFraming {
-  const spec = CAMERA_PRESET_SPECS[setup.preset] ?? CAMERA_PRESET_SPECS.behindHigh;
+  // shortcut: 'shoulder' frames like behindHigh until the mouse-look camera (task F1) replaces it
+  const spec = setup.preset === 'shoulder' ? CAMERA_PRESET_SPECS.behindHigh : CAMERA_PRESET_SPECS[setup.preset];
   const tanV = Math.tan(((fovDeg * Math.PI) / 180) * 0.5);
   const tanH = tanV * Math.max(0.5, aspect || 16 / 9);
   const a = (spec.pitchDeg * Math.PI) / 180;

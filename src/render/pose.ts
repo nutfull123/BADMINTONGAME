@@ -559,3 +559,88 @@ function pruneTrail(buf: TrailBuffer, nowSeconds: number): void {
 export function computePulseScale(timeSeconds: number): number {
   return 1 + 0.14 * Math.sin(timeSeconds * 6);
 }
+
+// ---------- Camera presets (settings) ----------
+
+export interface CameraPresetSpec {
+  pitchDeg: number; // camera elevation angle below horizontal
+  top: number;      // NDC y the far player's head (1.95 m on the far baseline) lands on; <= 0.8 keeps the HUD band clear
+  bottom: number;   // NDC y (as a positive number) the near baseline lands on
+  halfSpan: number; // m either side of the camera that must fit horizontally at the near baseline
+}
+
+// top is 0.78 everywhere: the scoreboard HUD covers the top ~10% of the view (NDC y > 0.8).
+export const CAMERA_PRESET_SPECS: Record<'behindHigh' | 'behindLow' | 'broadcast', CameraPresetSpec> = {
+  behindHigh: { pitchDeg: 35, top: 0.78, bottom: 0.88, halfSpan: 6.2 },
+  behindLow: { pitchDeg: 22, top: 0.78, bottom: 0.95, halfSpan: 3.6 },
+  broadcast: { pitchDeg: 45, top: 0.78, bottom: 0.55, halfSpan: 6.2 },
+};
+
+export const CAMERA_HEIGHT_STEP = 2; // m of camera height per 1.0 of the height offset
+export const CAMERA_DISTANCE_STEP = 3; // m of camera distance per 1.0 of the distance offset
+const FAR_HEAD_Y = 1.95;
+
+export interface CameraSetup {
+  preset: keyof typeof CAMERA_PRESET_SPECS;
+  height: number;   // -1..1
+  distance: number; // -1..1
+}
+
+// Camera for a preset: solves the camera position so the far head and the near baseline land on the preset's NDC
+// rows, widens it if the sidelines would not fit, then applies the height/distance offsets (the look-at point stays
+// fixed) and the zoom (moves along the view ray toward the look-at point).
+export function computePresetFraming(
+  setup: CameraSetup,
+  aspect: number,
+  fovDeg = 50,
+  camX = 0,
+  zoom = 1,
+): CameraFraming {
+  const spec = CAMERA_PRESET_SPECS[setup.preset] ?? CAMERA_PRESET_SPECS.behindHigh;
+  const tanV = Math.tan(((fovDeg * Math.PI) / 180) * 0.5);
+  const tanH = tanV * Math.max(0.5, aspect || 16 / 9);
+  const a = (spec.pitchDeg * Math.PI) / 180;
+  const Fy = -Math.sin(a), Fz = -Math.cos(a), Uy = Math.cos(a), Uz = -Math.sin(a);
+
+  // (P - C) . (U - n tanV F) = 0 for both anchor points: a 2x2 linear system in the camera (y, z).
+  const row = (n: number, py: number, pz: number) => {
+    const wy = Uy - n * tanV * Fy, wz = Uz - n * tanV * Fz;
+    return { wy, wz, rhs: py * wy + pz * wz };
+  };
+  const r1 = row(spec.top, FAR_HEAD_Y, -6.7), r2 = row(-spec.bottom, 0, 6.7);
+  const det = r1.wy * r2.wz - r1.wz * r2.wy;
+  let cy = (r1.rhs * r2.wz - r1.wz * r2.rhs) / det;
+  let cz = (r1.wy * r2.rhs - r1.rhs * r2.wy) / det;
+
+  // Look-at: where the view ray meets y = 0.4, as computeCameraFraming does.
+  const lookY = 0.4;
+  const rayToLook = (cy - lookY) / Math.sin(a);
+  let lookZ = cz - rayToLook * Math.cos(a);
+
+  // Sidelines (+-3.05) plus follow room must fit horizontally at the near baseline.
+  const depthNear = (cz - 6.7) * Math.cos(a) + cy * Math.sin(a);
+  const minDepth = spec.halfSpan / (tanH * 0.9);
+  if (depthNear < minDepth) { // moving away along the ray only shrinks the image, so the vertical anchors stay valid
+    const s = minDepth / depthNear;
+    cy = lookY + (cy - lookY) * s;
+    cz = lookZ + (cz - lookZ) * s;
+  }
+
+  const followX = camX * 0.72;
+  const h = clamp(Number.isFinite(setup.height) ? setup.height : 0, -1, 1);
+  const d = clamp(Number.isFinite(setup.distance) ? setup.distance : 0, -1, 1);
+  cy += h * CAMERA_HEIGHT_STEP;
+  cz += d * CAMERA_DISTANCE_STEP;
+
+  const distScale = 1 / clampZoom(zoom);
+  return {
+    pos: { x: followX, y: lookY + (cy - lookY) * distScale, z: lookZ + (cz - lookZ) * distScale },
+    lookAt: { x: followX, y: lookY, z: lookZ },
+  };
+}
+
+// low = 1, medium = up to 1.5, high = device pixel ratio capped at 2.
+export function pixelRatioFor(q: 'low' | 'medium' | 'high', devicePixelRatio: number): number {
+  const dpr = Number.isFinite(devicePixelRatio) && devicePixelRatio > 0 ? devicePixelRatio : 1;
+  return q === 'low' ? 1 : Math.min(dpr, q === 'medium' ? 1.5 : 2);
+}

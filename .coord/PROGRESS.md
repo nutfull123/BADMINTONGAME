@@ -6,7 +6,7 @@
 
 ## Paused 2026-11-22 (resume here)
 - V3 textures/HDRI (agy, branch head fd03240): APPROVED round 2 by Sonnet, not merged yet
-- V1 characters (Sonnet, agent/sonnet-V1 76ceb2b): agy reviewing (xV1) -> .coord/reviews/agent/sonnet-V1.md
+- V1 characters (Sonnet, agent/sonnet-V1 76ceb2b): APPROVED by agy, not merged yet
 - Next: merge V3 then V1, check in Chrome (test port 5176, not 5173), push
 
 ## Done

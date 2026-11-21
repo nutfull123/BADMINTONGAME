@@ -168,3 +168,57 @@ describe('buildIntent with rebound controls', () => {
     expect(() => buildIntent(k, newMouseAccum(), 0.1, false)).not.toThrow();
   });
 });
+
+import { newLook, stepLook, moveRelativeToYaw, LOOK_SENS, YAW_LIMIT, PITCH_MIN, PITCH_MAX } from './intent';
+
+describe('shoulder look', () => {
+  it('yaw and pitch accumulate from the mouse (right = turn right, up = look up) and clamp', () => {
+    const look = newLook();
+    stepLook(look, 100, -40, LOOK_SENS);
+    expect(look.yaw).toBeCloseTo(100 * LOOK_SENS);
+    expect(look.pitch).toBeCloseTo(40 * LOOK_SENS);
+    stepLook(look, 100, -40, LOOK_SENS);
+    expect(look.yaw).toBeCloseTo(200 * LOOK_SENS);
+    stepLook(look, 1e6, -1e6, LOOK_SENS);
+    expect(look.yaw).toBeCloseTo(YAW_LIMIT);
+    expect(look.pitch).toBeCloseTo(PITCH_MAX);
+    stepLook(look, -1e6, 1e6, LOOK_SENS);
+    expect(look.yaw).toBeCloseTo(-YAW_LIMIT);
+    expect(look.pitch).toBeCloseTo(PITCH_MIN);
+    expect(YAW_LIMIT).toBeCloseTo((100 * Math.PI) / 180);
+    expect(PITCH_MIN).toBeCloseTo((-15 * Math.PI) / 180);
+    expect(PITCH_MAX).toBeCloseTo((70 * Math.PI) / 180);
+  });
+
+  it('buildIntent with a look turns the view, scaled by mouseSensitivity, and leaves the racket alone', () => {
+    const k = newKeyState(); const m = newMouseAccum(); const look = newLook();
+    const controls: ControlSettings = { mouseSensitivity: 2, keys: DEFAULT_KEYS };
+    m.dx = 50; m.dy = 20;
+    const i = buildIntent(k, m, 0.01, false, controls, look);
+    expect(look.yaw).toBeCloseTo(50 * LOOK_SENS * 2);
+    expect(look.pitch).toBeCloseTo(-20 * LOOK_SENS * 2);
+    expect(i.racket).toEqual({ x: 0, y: 0 });
+    expect(m.dx).toBe(0);
+  });
+
+  it('movement rotates with yaw: yaw 0 is the court mapping, yaw 90 deg turns W sideways', () => {
+    const k = newKeyState(); const m = newMouseAccum(); const look = newLook();
+    press(k, 'KeyW');
+    const straight = buildIntent(k, m, 0.01, false, undefined, look).move;
+    expect(straight.x).toBeCloseTo(0);
+    expect(straight.z).toBeCloseTo(-1);
+    look.yaw = Math.PI / 2;
+    const side = buildIntent(k, m, 0.01, false, undefined, look).move;
+    expect(side.x).toBeCloseTo(1); // looking right: forward is +x
+    expect(side.z).toBeCloseTo(0);
+    expect(moveRelativeToYaw({ x: 1, z: 0 }, Math.PI / 2).z).toBeCloseTo(1); // D while looking right = toward the camera
+  });
+
+  it('without a look (other presets) buildIntent is unchanged: mouse moves the racket, keys are court axes', () => {
+    const k = newKeyState(); const m = newMouseAccum();
+    press(k, 'KeyW'); m.dx = 100;
+    const i = buildIntent(k, m, 0.5, false);
+    expect(i.move).toEqual({ x: 0, z: -1 });
+    expect(i.racket.x).toBeCloseTo(100 * MOUSE_SENS);
+  });
+});

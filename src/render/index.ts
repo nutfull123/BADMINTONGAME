@@ -5,6 +5,8 @@ import {
   MAX_RIGS,
   clampZoom,
   computePresetFraming,
+  shoulderFraming,
+  type ShoulderFraming,
   pixelRatioFor,
   computePlayerPose,
   computePulseScale,
@@ -570,12 +572,28 @@ export function createRenderer(container: HTMLElement) {
   let targetZoom = 1;
   let currentZoom = 1;
   let camSetup: CameraSettings = { preset: 'behindHigh', height: 0, distance: 0, zoom: 1, follow: true };
+  // 'shoulder' camera: view angles set by the mouse, player position followed smoothly (no allocations per frame)
+  let lookYaw = 0, lookPitch = 0, shFollowed = false;
+  const shFeet: Vec3 = { x: 0, y: 0, z: 0 };
+  const shFrame: ShoulderFraming = { pos: { x: 0, y: 0, z: 0 }, lookAt: { x: 0, y: 0, z: 0 }, dir: { x: 0, y: 0, z: 0 } };
+  const aimOut = { origin: { x: 0, y: 0, z: 0 }, dir: { x: 0, y: 0, z: -1 } };
   let extras = true; // low quality drops the shuttle shadow, drop line and trail
 
   function setCamera(c: CameraSettings) {
     camSetup = { ...c };
     targetZoom = currentZoom = clampZoom(c.zoom);
     if (!c.follow) camX = 0;
+    shFollowed = false;
+  }
+
+  function setLook(yaw: number, pitch: number) {
+    lookYaw = yaw;
+    lookPitch = pitch;
+  }
+
+  // Camera position and unit forward of the last rendered frame (one shared object, overwritten every frame).
+  function aimRay(): { origin: Vec3; dir: Vec3 } {
+    return aimOut;
   }
 
   function setQuality(q: GraphicsQuality) {
@@ -615,9 +633,28 @@ export function createRenderer(container: HTMLElement) {
     // Smooth camera follow + aspect/FOV-computed framing of both baselines & sidelines + zoom easing
     if (near && camSetup.follow) camX += (near.pos.x - camX) * (1 - Math.exp(-CAM_FOLLOW * dt));
     currentZoom = stepZoom(currentZoom, targetZoom, dt);
-    const framing = computePresetFraming(camSetup, camera.aspect, CAM_FOV_DEG, camX, currentZoom);
-    camera.position.set(framing.pos.x, framing.pos.y, framing.pos.z);
-    camera.lookAt(framing.lookAt.x, framing.lookAt.y, framing.lookAt.z);
+    if (camSetup.preset === 'shoulder') {
+      if (near) {
+        const k = shFollowed ? 1 - Math.exp(-CAM_FOLLOW * dt) : 1;
+        shFeet.x += (near.pos.x - shFeet.x) * k;
+        shFeet.y += (near.pos.y - shFeet.y) * k;
+        shFeet.z += (near.pos.z - shFeet.z) * k;
+        shFollowed = true;
+      }
+      shoulderFraming(shFeet, near ? heightOf(near.stats) : 1.78, lookYaw, lookPitch, currentZoom,
+        camSetup.height, camSetup.distance, shFrame);
+      camera.position.set(shFrame.pos.x, shFrame.pos.y, shFrame.pos.z);
+      camera.lookAt(shFrame.lookAt.x, shFrame.lookAt.y, shFrame.lookAt.z);
+      aimOut.origin.x = shFrame.pos.x; aimOut.origin.y = shFrame.pos.y; aimOut.origin.z = shFrame.pos.z;
+      aimOut.dir.x = shFrame.dir.x; aimOut.dir.y = shFrame.dir.y; aimOut.dir.z = shFrame.dir.z;
+    } else {
+      const framing = computePresetFraming(camSetup, camera.aspect, CAM_FOV_DEG, camX, currentZoom);
+      camera.position.set(framing.pos.x, framing.pos.y, framing.pos.z);
+      camera.lookAt(framing.lookAt.x, framing.lookAt.y, framing.lookAt.z);
+      camera.getWorldDirection(tmpVecB);
+      aimOut.origin.x = framing.pos.x; aimOut.origin.y = framing.pos.y; aimOut.origin.z = framing.pos.z;
+      aimOut.dir.x = tmpVecB.x; aimOut.dir.y = tmpVecB.y; aimOut.dir.z = tmpVecB.z;
+    }
 
     // Shuttle orientation (cork-first along velocity)
     const { pos, vel } = view.shuttle;
@@ -734,5 +771,5 @@ export function createRenderer(container: HTMLElement) {
     renderer.domElement.remove();
   }
 
-  return { render, resize, dispose, setZoom, setCamera, setQuality };
+  return { render, resize, dispose, setZoom, setCamera, setQuality, setLook, aimRay };
 }

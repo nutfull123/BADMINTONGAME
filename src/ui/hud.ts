@@ -7,6 +7,7 @@ export function createHud(root: HTMLElement): {
     stamina: number;
     charge: number | null;
     message: string | null;
+    crosshair?: 'idle' | 'target' | null; // 'shoulder' mode: shown while playing, green when the shuttle is in reach
   }): void;
   dispose(): void;
 } {
@@ -104,11 +105,19 @@ export function createHud(root: HTMLElement): {
   centerMsg.dataset.testid = 'hud-message';
   centerMsg.style.display = 'none';
 
-  hud.append(board, bars, centerMsg);
+  const cross = document.createElement('div');
+  cross.dataset.testid = 'crosshair';
+  cross.style.cssText = 'position:absolute;top:50%;left:50%;width:18px;height:18px;margin:-9px 0 0 -9px;box-sizing:border-box;'
+    + 'border:2px solid #fff;border-radius:50%;pointer-events:none;display:none;box-shadow:0 0 3px rgba(0,0,0,0.8)';
+
+  hud.append(board, bars, centerMsg, cross);
   root.appendChild(hud);
 
   return {
-    update({ match, stamina, charge, message }) {
+    update({ match, stamina, charge, message, crosshair }) {
+      cross.style.display = crosshair ? 'block' : 'none';
+      cross.style.borderColor = crosshair === 'target' ? '#22c55e' : '#fff';
+
       nearScore.textContent = String(match.score.near);
       farScore.textContent = String(match.score.far);
       nearGames.textContent = `เกม (Games): ${match.gamesWon.near}`;

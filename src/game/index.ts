@@ -24,8 +24,14 @@ export function startGame(root: HTMLElement): void {
     return writeSave(save);
   };
 
+  const openHome = (): void => {
+    showHome(root, openMenu, save.settings.controls.keys);
+  };
+
   const openMenu = (): void => {
-    save = loadSave();
+    // The in-memory save is authoritative for this session: re-reading storage here would throw away a
+    // character or settings change that writeSave could not persist (blocked storage, private window),
+    // sending the player back to character creation with no way out.
     const active = activeCharacter(save);
     if (!active) {
       openCharacters();
@@ -64,12 +70,12 @@ export function startGame(root: HTMLElement): void {
   };
 
   const openCharacters = (): void => {
-    showCharacters(root, save, updateSave, openMenu);
+    showCharacters(root, save, updateSave, openMenu, openHome);
   };
 
   const openSettings = (): void => {
     showSettingsPage(root, save, updateSave, openMenu);
   };
 
-  showHome(root, openMenu);
+  openHome();
 }

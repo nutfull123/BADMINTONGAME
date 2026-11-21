@@ -1,4 +1,5 @@
 // Playable match: fixed-timestep loop, rally flow, scoring, pause. Wires input, bot, render and ui.
+import { loadSave } from '../app/save';
 import { createInput } from '../input';
 import { createRenderer } from '../render';
 import { FORMAT_3X15, FORMAT_3X21, awardRally, createMatch, serverSlot } from '../rules';
@@ -34,10 +35,13 @@ export function startMatch(root: HTMLElement, setup: MatchSetup, onAgain: () => 
   const container = document.createElement('div');
   container.style.cssText = 'position:absolute;inset:0';
   root.appendChild(container);
+  const prefs = loadSave().settings;
   const renderer = createRenderer(container);
-  const input = createInput(container.querySelector('canvas')!);
+  renderer.setCamera(prefs.camera);
+  renderer.setQuality(prefs.graphics.quality);
+  const input = createInput(container.querySelector('canvas')!, prefs.controls);
   const hud = createHud(root);
-  const viewControls = createViewControls(root, (z) => (renderer as { setZoom?: (z: number) => void }).setZoom?.(z)); // render adds setZoom in a parallel task
+  const viewControls = createViewControls(root, (z) => renderer.setZoom(z));
 
   // the human is near slot 0; the rest are bots (the human's partner, then the opponents)
   const teams = buildTeams(settings.event, humanStats);
@@ -126,7 +130,7 @@ export function startMatch(root: HTMLElement, setup: MatchSetup, onAgain: () => 
       landing: settings.landingMarker && rally.stage !== 'serve' ? predictLanding(rally.shuttle) : null,
       timingRing: settings.timingRing && charging ? Math.max(0, Math.min(1, 1 - gap / 1.5)) : null,
       charge: charging && human ? chargeLevel(me, human.chargeTime) : null,
-      aim: aimView(me, rally.shuttle, assist),
+      aim: prefs.assists.racketAid ? aimView(me, rally.shuttle, assist) : undefined,
     };
   }
 

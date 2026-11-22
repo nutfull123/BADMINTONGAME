@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { CameraSettings, GraphicsQuality, PlayerState, Side, Slot, Vec3, WorldView } from '../types';
+import type { CameraSettings, Gender, GraphicsQuality, PlayerState, Side, Slot, Vec3, WorldView } from '../types';
 import { heightOf } from '../sim/tuning';
 import {
   MAX_RIGS,
@@ -21,6 +21,13 @@ import {
 } from './pose';
 import { createArena } from './arena';
 import { createRacketMesh, createShuttlecockMesh } from './equipment';
+import {
+  createCharacter,
+  loadCharacterTemplates,
+  updateCharacter,
+  type CharacterInstance,
+  type CharacterTemplates,
+} from './characters';
 
 const HALF_L = 6.7, HALF_W_D = 3.05, HALF_W_S = 2.59, SHORT_SVC = 1.98, LONG_SVC_D = 5.94;
 const CAM_FOLLOW = 5; // lerp rate per second
@@ -112,6 +119,8 @@ interface HumanRig {
   ponytail: THREE.Mesh;
   marker: THREE.Mesh;
   root: THREE.Group;
+  body: THREE.Group; // the capsule figure; hidden once a real character is showing
+  chars: Partial<Record<Gender, CharacterInstance>>;
   torso: THREE.Mesh;
   shorts: THREE.Mesh;
   head: THREE.Mesh;
@@ -156,13 +165,13 @@ function createHumanRig(side: Side, assets: SharedHumanAssets): HumanRig {
   // Racket group with origin at the centre of the racket head (racketHead)
   const racketGroup = createRacketMesh();
 
-  root.add(
+  const body = new THREE.Group();
+  body.add(
     torso,
     shorts,
     head,
     hair,
     ponytail,
-    marker,
     upperArmR,
     forearmR,
     upperArmL,
@@ -173,8 +182,8 @@ function createHumanRig(side: Side, assets: SharedHumanAssets): HumanRig {
     thighR,
     shinR,
     footR,
-    racketGroup,
   );
+  root.add(body, marker, racketGroup);
 
   return {
     side,
@@ -182,6 +191,8 @@ function createHumanRig(side: Side, assets: SharedHumanAssets): HumanRig {
     ponytail,
     marker,
     root,
+    body,
+    chars: {},
     torso,
     shorts,
     head,
@@ -222,6 +233,8 @@ function updateHumanRig(
   timeSeconds: number,
   assets: SharedHumanAssets,
   isHuman: boolean,
+  templates: CharacterTemplates | null,
+  dt: number,
 ): void {
   if (rig.side !== p.side || rig.slot !== p.slot) {
     rig.side = p.side;
@@ -418,6 +431,20 @@ function updateHumanRig(
 
   updateLeg(-1, pose.leftLegPitch, pose.leftLegRoll, pose.leftKneeBend, rig.thighL, rig.shinL, rig.footL);
   updateLeg(1, pose.rightLegPitch, pose.rightLegRoll, pose.rightKneeBend, rig.thighR, rig.shinR, rig.footR);
+
+  // Real character: shown instead of the capsules once the models have loaded
+  const gender = p.stats.gender;
+  let ch = rig.chars[gender] ?? null;
+  if (!ch && templates) {
+    ch = rig.chars[gender] = createCharacter(templates[gender], gender);
+    rig.root.add(ch.model);
+  }
+  rig.body.visible = !ch;
+  for (const g of ['male', 'female'] as const) {
+    const other = rig.chars[g];
+    if (other) other.model.visible = other === ch;
+  }
+  if (ch) updateCharacter(ch, p, dt, yaw, pose.hipYOffset, gripTarget, poleHint);
 }
 
 function createPreallocatedArcGeometry(innerR: number, outerR: number, segments: number): THREE.BufferGeometry {
@@ -561,6 +588,13 @@ export function createRenderer(container: HTMLElement) {
 
   // Pre-allocate two human player rigs once and reuse every frame
   const humanAssets = createSharedHumanAssets();
+  // Real characters load in the background; until then (or if loading fails) the capsule figures are shown.
+  let templates: CharacterTemplates | null = null;
+  let disposed = false;
+  loadCharacterTemplates().then(
+    (t) => { if (!disposed) templates = t; },
+    (err) => console.warn('[render] character models failed to load, keeping the capsule figures:', err),
+  );
   const rigs: HumanRig[] = Array.from({ length: MAX_RIGS }, (_, i) =>
     createHumanRig(i % 2 === 0 ? 'near' : 'far', humanAssets),
   );
@@ -627,7 +661,7 @@ export function createRenderer(container: HTMLElement) {
     for (let i = 0; i < rigs.length; i++) {
       const p = view.players[i];
       rigs[i].root.visible = shown[i];
-      if (p) updateHumanRig(rigs[i], p, elapsed, humanAssets, p === near);
+      if (p) updateHumanRig(rigs[i], p, elapsed, humanAssets, p === near, templates, Math.min(0.1, Math.max(0, dt)));
     }
 
     // Smooth camera follow + aspect/FOV-computed framing of both baselines & sidelines + zoom easing
@@ -753,6 +787,7 @@ export function createRenderer(container: HTMLElement) {
   }
 
   function dispose() {
+    disposed = true;
     window.removeEventListener('resize', resize);
     const geometries = new Set<THREE.BufferGeometry>();
     const materials = new Set<THREE.Material>();

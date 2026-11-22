@@ -13,7 +13,7 @@
   "include": [
     "server",
     "src/types.ts",
-    "src/net",
+    "src/net/protocol.ts",
     "src/rules",
     "src/physics",
     "src/sim",

@@ -2,6 +2,7 @@
 
 ## In progress
 <!-- - [agent] task — files owned — started YYYY-MM-DD -->
+- [opencode] S1 serve contact at or below 1.15 m at any assist (BWF 9.1.6) — src/sim/** — started 2026-11-22
 - [agy] Phase 4 K2 career pages, bracket view, match wiring, points on result screen — src/ui/**, src/game/** — started 2026-11-22
 
 ## Done

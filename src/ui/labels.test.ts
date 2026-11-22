@@ -114,17 +114,19 @@ describe('UI shell pure helpers (labels, key formatting, conflict warning, chara
     expect(ROUND_LABELS.F).toContain('Final');
   });
 
-  it('formats earned points out of 20 and progress toward the next whole stat point', () => {
+  it('formats earned points out of 20 and progress toward the next whole stat point without (x / 100)', () => {
     const zero = formatEarnedPointsSummary(0);
     expect(zero.whole).toBe(0);
     expect(zero.progressPct).toBe(0);
     expect(zero.text).toContain('0 / 20');
+    expect(zero.progressText).toBe('ความคืบหน้าแต้มถัดไป 0%');
 
     const partial = formatEarnedPointsSummary(2.75);
     expect(partial.whole).toBe(2);
     expect(partial.progressPct).toBe(75);
     expect(partial.text).toContain('2.75 / 20');
-    expect(partial.progressText).toContain('75%');
+    expect(partial.progressText).toBe('ความคืบหน้าแต้มถัดไป 75%');
+    expect(partial.progressText).not.toContain('/ 100');
 
     const capped = formatEarnedPointsSummary(20);
     expect(capped.whole).toBe(20);

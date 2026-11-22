@@ -2,14 +2,11 @@
 
 ## In progress
 <!-- - [agent] task — files owned — started YYYY-MM-DD -->
-- [sonnet] F1 FPS mouse look (shoulder camera, crosshair aiming) — src/input/**, src/sim/assist.ts, src/render/index.ts, src/render/pose.ts, src/game/match.ts, src/game/tutorial.ts, src/ui/hud.ts — started 2026-11-22
-
-## Paused 2026-11-22 (resume here)
-- V3 textures/HDRI (agy, branch head fd03240): APPROVED round 2 by Sonnet, not merged yet
-- V1 characters (Sonnet, agent/sonnet-V1 76ceb2b): APPROVED by agy, not merged yet
-- Next: merge V3 then V1, check in Chrome (test port 5176, not 5173), push
 
 ## Done
+- [agy] Phase 3 V3 wood floor + linoleum mat textures, gym_01 HDRI environment (Sonnet review round 2) — main c0185ff — 2026-11-22
+- [sonnet] Phase 3 V1 animated Quaternius characters (clips, team tint, racket-arm IK, capsule fallback), reviewed by agy — main d42499c — 2026-11-22
+- [sonnet] F1 FPS mouse look (shoulder camera, crosshair aiming), reviewed by agy; zoom-out to 6.6 m (claude) — main 9bec0b0, 2a5d5b0 — 2026-11-22
 - [sonnet] Phase 3 V2b real racket (oval frame, string grid, T-joint, octagonal grip) + 16-feather shuttlecock; reviewed by agy — main 5122fcc — 2026-11-22
 - [agy] Phase 3 V2a indoor hall merged after 2 review rounds (Sonnet) — main b8a5bee — 2026-11-22
 - [agy] Phase 3 V2a indoor hall (stands, crowd, ad boards, lights, RoomEnvironment, quality) — src/render/arena.ts, src/render/arena.test.ts — 833179e — 2026-11-21

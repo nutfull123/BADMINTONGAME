@@ -2,6 +2,8 @@
 
 ## In progress
 <!-- - [agent] task — files owned — started YYYY-MM-DD -->
+- [sonnet] Phase 6 N1 game server — server/**, tsconfig.server.json, vite.server.config.ts, Dockerfile, fly.toml, docs/deploy.md, package.json scripts — started 2026-11-22
+- [sonnet] Phase 6 N2 online client core — src/net/** (not protocol.ts), src/game/onlineMatch.ts, src/account/auth.ts (getAccessToken) — started 2026-11-22
 
 ## Waiting on the user
 - Phase 5 test with a real Supabase project: create it, run supabase/migrations/0001_user_saves.sql, providers and URLs per docs/supabase-setup.md, fill .env.local; then claude tests sign-up, Google, sync and delete

@@ -2,9 +2,10 @@
 
 ## In progress
 <!-- - [agent] task — files owned — started YYYY-MM-DD -->
-- [sonnet] Phase 4 K1 career core — src/career/**, src/rules/index.ts, src/app/save.ts, src/app/characters.ts (+tests) — started 2026-11-22
+- [agy] Phase 4 K2 career pages, bracket view, match wiring, points on result screen — src/ui/**, src/game/** — started 2026-11-22
 
 ## Done
+- [sonnet] Phase 4 K1 career core (tiers, points, brackets, simulation, parseCareer, FORMAT_1X15, awardPoints), reviewed by agy — main merge after 69e1976 — 2026-11-22
 - [agy] Phase 3 V3 wood floor + linoleum mat textures, gym_01 HDRI environment (Sonnet review round 2) — main c0185ff — 2026-11-22
 - [sonnet] Phase 3 V1 animated Quaternius characters (clips, team tint, racket-arm IK, capsule fallback), reviewed by agy — main d42499c — 2026-11-22
 - [sonnet] F1 FPS mouse look (shoulder camera, crosshair aiming), reviewed by agy; zoom-out to 6.6 m (claude) — main 9bec0b0, 2a5d5b0 — 2026-11-22

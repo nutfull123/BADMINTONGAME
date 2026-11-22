@@ -373,8 +373,12 @@ function makeHit(p: PlayerState, swing: Swing, c: Contact, doubles: boolean): Hi
     (swing.basic === 'backhand' && c.rx > T.WRONG_SIDE_DEADZONE);
   const perfect = !wrongSide && !swing.lift && c.d < T.SWEET_RADIUS;
   const shot: ShotType = swing.lift ? 'clear' : swing.shot;
+  // BWF Law 9.1.6: a serve must be struck with the whole shuttle below SERVE_MAX_CONTACT. The racket head is
+  // clamped for a serve, but the contact is wherever the shuttle is inside the hit radius (larger with hit assist),
+  // so cap the launch contact as well. Non-serve shots keep their contact height.
+  const contact = isServe(shot) ? { ...c.pos, y: Math.min(c.pos.y, T.SERVE_MAX_CONTACT) } : c.pos;
   const launch = launchShuttle({
-    shot, side: p.side, contact: c.pos, flick: c.flick, charge: swing.charge, perfect, weak: wrongSide, stats: p.stats, doubles,
+    shot, side: p.side, contact, flick: c.flick, charge: swing.charge, perfect, weak: wrongSide, stats: p.stats, doubles,
   });
   return { shot, perfect, launch };
 }

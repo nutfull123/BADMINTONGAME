@@ -38,7 +38,7 @@ export const REACH_LATERAL_PER_M = 1.0; // extra sideways reach per metre of hei
 export const RACKET_LOW = 0.3; // racket head height at racket.y = -1 (about knee)
 export const RACKET_TOP_FACTOR = 1.3; // overhead head height = height * this + RACKET_TOP_OFFSET
 export const RACKET_TOP_OFFSET = 0.15;
-export const SERVE_MAX_CONTACT = 1.15; // serve contact must be below this height (racket head is clamped)
+export const SERVE_MAX_CONTACT = 1.15; // serve contact must be at or below this height (racket head and launch contact are clamped)
 
 // ---------- swing and hit ----------
 export const SWING_WINDOW = 0.12; // s the swing can make contact after release

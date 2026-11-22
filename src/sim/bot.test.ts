@@ -222,6 +222,7 @@ describe('bot AI', () => {
         }
 
         expect(hitLaunch).not.toBeNull();
+        expect(hitLaunch!.pos.y).toBeLessThanOrEqual(1.15); // BWF Law 9.1.6: serve contact below 1.15 m
         const landing = predictLanding(hitLaunch!);
         expect(landing).not.toBeNull();
         expect(isInServiceBox(landing!, 'near', court)).toBe(true);

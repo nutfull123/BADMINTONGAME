@@ -2,6 +2,7 @@
 
 ## In progress
 <!-- - [agent] task — files owned — started YYYY-MM-DD -->
+- [sonnet] Phase 6 S2 online serve timeout — server/match.ts, server/match.test.ts — started 2026-11-23
 - [agy] Phase 6 N3 online lobby pages, room page, HUD names, menu wiring — src/ui/**, src/game/index.ts — started 2026-11-22
 
 ## Waiting on the user

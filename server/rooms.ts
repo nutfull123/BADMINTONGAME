@@ -149,8 +149,8 @@ export class Rooms {
     if (room.status !== 'lobby') return this.error(me.session!, 'bad-settings', 'The match has already started');
     if (room.members.size > seatCount(settings.event)) return this.error(me.session!, 'bad-settings', 'Too many players for that event');
     room.settings = settings;
-    for (const m of room.members.values()) { // players who no longer fit the event leave their seat
-      if (m.seat !== null && this.seatProblem(room, m, m.seat, true)) m.seat = null;
+    for (const m of room.members.values()) { // a seat that no longer exists (doubles to singles) is given up
+      if (m.seat !== null && m.seat >= seatCount(settings.event)) m.seat = null;
     }
     this.resetReady(room);
     this.broadcast(room);
@@ -169,10 +169,6 @@ export class Rooms {
     if (room.status !== 'lobby') return this.error(s, 'bad-message', 'The match has already started');
     for (const m of room.members.values()) {
       if (m.seat === null || !m.ready) return this.error(s, 'not-ready', `${m.name} is not seated and ready`);
-    }
-    for (const m of room.members.values()) {
-      const why = this.seatProblem(room, m, m.seat!, true);
-      if (why) return this.error(s, 'bad-seat', why);
     }
     this.begin(room);
   }
@@ -248,19 +244,11 @@ export class Rooms {
     for (const m of room.members.values()) m.ready = false;
   }
 
-  // Why `me` cannot sit in `seat` of this room (null = fine). `recheck`: test the rules even for the seat already held.
-  private seatProblem(room: Room, me: Member, seat: number, recheck = false): string | null {
-    const { event } = room.settings;
-    if (seat >= seatCount(event)) return 'That seat does not exist in this event';
+  // Why `me` cannot sit in `seat` (null = fine). Private rooms mix genders freely: any character, any seat.
+  private seatProblem(room: Room, me: Member, seat: number): string | null {
+    if (seat >= seatCount(room.settings.event)) return 'That seat does not exist in this event';
     for (const m of room.members.values()) {
       if (m !== me && m.seat === seat) return 'That seat is taken';
-    }
-    if (!recheck && me.seat === seat) return null;
-    const need = needGender(event);
-    if (need && me.stats.gender !== need) return `This event is for ${need} characters`;
-    if (event === 'XD') {
-      const mate = [...room.members.values()].find((m) => m !== me && m.seat === (seat ^ 2));
-      if (mate && mate.stats.gender === me.stats.gender) return 'A mixed doubles team needs one of each';
     }
     return null;
   }

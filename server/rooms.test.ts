@@ -104,46 +104,45 @@ describe('rooms', () => {
     expect(room(a).seats[3]).toMatchObject({ userId: 'a', ready: false });
   });
 
-  describe('gender rules', () => {
-    it('men\'s singles refuses a woman, women\'s doubles refuses a man', () => {
-      const w = fake('w', female);
-      open(w, settings({ event: 'MS' }));
-      expect(w.last('room')!.you).toBeNull(); // no legal seat
-      rooms.handle(w, { t: 'seat', seat: 0 });
-      expect(errors(w)).toEqual(['bad-seat']);
+  describe('private rooms mix genders freely', () => {
+    it('any character may sit in any seat of any event, and start', () => {
+      const w = fake('w', female), m = fake('m');
+      const code = open(w, settings({ event: 'MS' }));
+      expect(w.last('room')!.you).toBe(0);
+      rooms.handle(m, { t: 'join', code });
+      rooms.handle(w, { t: 'settings', settings: settings({ event: 'WD' }) });
+      expect(w.last('room')!.you).toBe(0);
+      expect(m.last('room')!.you).toBe(1); // a man in women's doubles
       rooms.handle(w, { t: 'ready', ready: true });
-      expect(errors(w)).toEqual(['bad-seat', 'bad-seat']);
-      const m = fake('m');
-      open(m, settings({ event: 'WD' }));
-      expect(m.last('room')!.you).toBeNull();
+      rooms.handle(m, { t: 'ready', ready: true });
+      rooms.handle(w, { t: 'start' });
+      expect(errors(w)).toEqual([]);
+      expect(room(w).status).toBe('playing');
     });
-    it('mixed doubles needs one of each per side', () => {
-      const m1 = fake('m1'), m2 = fake('m2'), w = fake('w', female);
-      const code = open(m1, settings({ event: 'XD' }));
-      rooms.handle(m2, { t: 'join', code });
-      expect(m2.last('room')!.you).toBe(1); // far side, no partner yet
-      rooms.handle(m2, { t: 'seat', seat: 2 }); // m1's partner seat: another man
-      expect(errors(m2)).toEqual(['bad-seat']);
-      rooms.handle(w, { t: 'join', code });
-      expect(w.last('room')!.you).toBe(2);
-    });
-    it('a settings change unseats players who no longer fit', () => {
-      const a = fake('a'), w = fake('w', female);
-      const code = open(a, settings({ event: 'MD' }));
-      rooms.handle(w, { t: 'join', code }); // women are not seated in MD
-      expect(w.last('room')!.you).toBeNull();
-      rooms.handle(a, { t: 'settings', settings: settings({ event: 'WD' }) });
-      expect(room(a).seats[0].userId).toBeNull();
+    it('a settings change to singles frees the seats that no longer exist', () => {
+      const a = fake('a');
+      open(a, settings({ event: 'MD' }));
+      rooms.handle(a, { t: 'seat', seat: 3 });
+      rooms.handle(a, { t: 'settings', settings: settings({ event: 'MS' }) });
       expect(a.last('room')!.you).toBeNull();
+      expect(room(a).seats).toHaveLength(2);
     });
-    it('start re-checks the rules and bots take the right gender', () => {
+    it('bots take the gender the event calls for (mixed doubles: the opposite of the human partner)', () => {
       const a = fake('a');
       open(a, settings({ event: 'XD' }));
       rooms.handle(a, { t: 'ready', ready: true });
       rooms.handle(a, { t: 'start' });
-      const seats = room(a).seats;
-      expect(seats.map((s) => s.stats.gender)).toEqual(['male', 'male', 'female', 'female']); // mate of a is female
-      expect(seats.map((s) => s.userId)).toEqual(['a', null, null, null]);
+      expect(room(a).seats.map((s) => s.stats.gender)).toEqual(['male', 'male', 'female', 'female']); // a's partner is female
+      const w = fake('w', female);
+      open(w, settings({ event: 'WS' }));
+      rooms.handle(w, { t: 'ready', ready: true });
+      rooms.handle(w, { t: 'start' });
+      expect(room(w).seats.map((s) => s.stats.gender)).toEqual(['female', 'female']);
+      const m = fake('m');
+      open(m, settings({ event: 'MD' }));
+      rooms.handle(m, { t: 'ready', ready: true });
+      rooms.handle(m, { t: 'start' });
+      expect(room(m).seats.map((s) => s.stats.gender)).toEqual(['male', 'male', 'male', 'male']);
     });
   });
 
@@ -155,7 +154,7 @@ describe('rooms', () => {
     const v = room(a);
     expect(v.seats).toHaveLength(4);
     expect(v.seats.filter((s) => s.userId === null).map((s) => s.name)).toEqual(['Bot', 'Bot', 'Bot']);
-    for (const s of v.seats) expect(validateStats(s.stats)).toBeNull();
+    for (const s of v.seats.filter((x) => x.userId === null)) expect(validateStats(s.stats, 20)).toBeNull();
   });
 
   describe('twenty points', () => {

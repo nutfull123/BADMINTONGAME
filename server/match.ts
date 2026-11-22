@@ -70,6 +70,7 @@ export class MatchLoop {
   private breakPause = false;
   private bots: (Bot | null)[];
   private humans: (Human | null)[];
+  private memory: ({ lastSeq: number; ackSeq: number } | undefined)[] = [];
   private acc = 0;
   private last: number | null = null;
   private readonly assist: number;
@@ -92,19 +93,26 @@ export class MatchLoop {
     this.freshBots();
   }
 
-  // A human takes the seat (at the start or when they rejoin); until then a bot plays it.
+  // A human takes the seat (at the start or when they rejoin); until then a bot plays it. A rejoining client keeps
+  // counting its seq, so the seat remembers the last seq seen and applied.
   attach(seat: SeatIndex, send: (m: ServerMessage) => void) {
-    this.humans[seat] = { send, queue: [], current: idleIntent(), lastSeq: -1, ackSeq: -1, frameTick: 0 };
+    const kept = this.memory[seat];
+    this.humans[seat] = { send, queue: [], current: idleIntent(), lastSeq: kept?.lastSeq ?? -1, ackSeq: kept?.ackSeq ?? -1, frameTick: 0 };
   }
-  detach(seat: SeatIndex) { this.humans[seat] = null; }
+  detach(seat: SeatIndex) {
+    const h = this.humans[seat];
+    if (h) this.memory[seat] = { lastSeq: h.lastSeq, ackSeq: h.ackSeq };
+    this.humans[seat] = null;
+  }
 
+  // Frames only count while the ball is in play (serve or rally); between points they are dropped, not acknowledged.
   input(seat: SeatIndex, frames: InputFrame[]) {
     const h = this.humans[seat];
     if (!h) return;
     for (const f of frames) {
       if (f.seq <= h.lastSeq) continue;
       h.lastSeq = f.seq;
-      h.queue.push(f);
+      if (this.phase === 'play') h.queue.push(f);
     }
     if (h.queue.length > MAX_FRAME_BACKLOG) h.queue.splice(0, h.queue.length - MAX_FRAME_BACKLOG);
   }
@@ -128,6 +136,7 @@ export class MatchLoop {
         this.rally = startRally(this.match, this.rally.players);
         this.freshBots();
         this.history.clear();
+        for (const h of this.humans) if (h) { h.queue = []; h.current = idleIntent(); }
         this.phase = 'play';
       }
     } else {

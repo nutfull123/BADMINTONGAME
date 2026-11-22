@@ -1,13 +1,22 @@
 import type { MatchState } from '../types';
 import { ensureStyles } from './styles';
 
-export function createHud(root: HTMLElement): {
+export interface HudSideNames {
+  near?: string;
+  far?: string;
+}
+
+export function createHud(
+  root: HTMLElement,
+  names?: HudSideNames,
+): {
   update(view: {
     match: MatchState;
     stamina: number;
     charge: number | null;
     message: string | null;
     crosshair?: 'idle' | 'target' | null; // 'shoulder' mode: shown while playing, green when the shuttle is in reach
+    names?: HudSideNames;
   }): void;
   dispose(): void;
 } {
@@ -26,7 +35,8 @@ export function createHud(root: HTMLElement): {
   const nearLabel = document.createElement('div');
   nearLabel.className = 'bm-side-label';
   const nearTitle = document.createElement('span');
-  nearTitle.textContent = 'คุณ (YOU)';
+  nearTitle.dataset.testid = 'hud-name-near';
+  nearTitle.textContent = names?.near ?? 'คุณ (YOU)';
   const nearServe = document.createElement('span');
   nearServe.className = 'bm-serve-badge';
   nearLabel.append(nearTitle, nearServe);
@@ -52,7 +62,8 @@ export function createHud(root: HTMLElement): {
   const farLabel = document.createElement('div');
   farLabel.className = 'bm-side-label';
   const farTitle = document.createElement('span');
-  farTitle.textContent = 'บอท (BOT)';
+  farTitle.dataset.testid = 'hud-name-far';
+  farTitle.textContent = names?.far ?? 'บอท (BOT)';
   const farServe = document.createElement('span');
   farServe.className = 'bm-serve-badge';
   farLabel.append(farTitle, farServe);
@@ -114,7 +125,9 @@ export function createHud(root: HTMLElement): {
   root.appendChild(hud);
 
   return {
-    update({ match, stamina, charge, message, crosshair }) {
+    update({ match, stamina, charge, message, crosshair, names: nextNames }) {
+      if (nextNames?.near !== undefined) nearTitle.textContent = nextNames.near;
+      if (nextNames?.far !== undefined) farTitle.textContent = nextNames.far;
       cross.style.display = crosshair ? 'block' : 'none';
       cross.style.borderColor = crosshair === 'target' ? '#22c55e' : '#fff';
 

@@ -15,6 +15,8 @@ export interface ResultExtras {
   totalEarned?: number;
   buttonLabel?: string;
   tournament?: ResultTournamentExtras;
+  sideNames?: { near?: string; far?: string };
+  subtitleNote?: string;
 }
 
 export function showResult(
@@ -28,23 +30,29 @@ export function showResult(
 
   const winnerSide: Side | null = match.winner;
   const youWon = winnerSide === 'near';
+  const nearName = extras?.sideNames?.near ?? 'คุณ';
+  const farName = extras?.sideNames?.far ?? 'บอท';
 
   const title = document.createElement('h1');
   title.className = 'bm-title';
-  title.style.color = youWon ? '#4ade80' : '#f87171';
+  title.style.color = winnerSide === null ? '#f8fafc' : youWon ? '#4ade80' : '#f87171';
   title.textContent =
     winnerSide === null
       ? 'จบการแข่งขัน (Match Ended)'
       : youWon
-        ? 'คุณชนะ! (YOU WIN)'
-        : 'บอทชนะ (BOT WINS)';
+        ? extras?.sideNames?.near
+          ? `${nearName} ชนะ! (YOU WIN)`
+          : 'คุณชนะ! (YOU WIN)'
+        : extras?.sideNames?.far
+          ? `${farName} ชนะ`
+          : 'บอทชนะ (BOT WINS)';
 
   const sub = document.createElement('p');
   sub.className = 'bm-subtitle';
   sub.style.fontSize = '24px';
   sub.style.fontWeight = '800';
   sub.style.color = '#f8fafc';
-  sub.textContent = `ผลรวมเกม (Games): คุณ ${match.gamesWon.near} - ${match.gamesWon.far} บอท`;
+  sub.textContent = `ผลรวมเกม (Games): ${nearName} ${match.gamesWon.near} - ${match.gamesWon.far} ${farName}`;
 
   const gamesList = document.createElement('div');
   gamesList.style.margin = '18px 0 22px 0';
@@ -59,6 +67,16 @@ export function showResult(
     .join('   ·   ');
 
   panel.append(title, sub, gamesList);
+
+  if (extras?.subtitleNote) {
+    const noteEl = document.createElement('div');
+    noteEl.dataset.testid = 'result-subtitle-note';
+    noteEl.style.margin = '0 auto 20px auto';
+    noteEl.style.fontSize = '14px';
+    noteEl.style.color = '#94a3b8';
+    noteEl.textContent = extras.subtitleNote;
+    panel.appendChild(noteEl);
+  }
 
   if (extras && (extras.pointsEarned !== undefined || extras.totalEarned !== undefined || extras.tournament)) {
     const extrasBox = document.createElement('div');

@@ -249,3 +249,10 @@ export interface CareerProgress {
   best: Partial<Record<TierId, number>>; // best round reached per tier: 0 = first round ... rounds.length = champion
   current: Tournament | null;
 }
+
+// ---------- account/ (phase 5): Supabase login and cloud save. Guest play never needs it ----------
+export interface AccountUser { id: string; email: string | null }
+// On first sign-in, when both this browser and the account hold characters, the player picks one:
+export type SyncChoice = 'cloud' | 'local' | 'merge';
+// Pure decision from the two saves: upload the local save, download the cloud one, ask the player, or nothing to do.
+export type SyncAction = 'upload' | 'download' | 'ask' | 'none';

@@ -230,3 +230,22 @@ Claude's calls (numbers live in `src/career/tuning.ts`):
   The player can abandon a tournament (counts as out in the current round, no bonus).
 - Points go to the active character only; nothing is earned online (phase 7 uses a separate
   20-point ranked set).
+
+## Phase 5 detail (design check 2026-11-22)
+
+User's answers: email confirmation off for now (Google sign-in is the main path; turn it on with a
+custom SMTP before a public launch); on first sign-in with characters both in this browser and in the
+account, the player picks "keep the account's", "keep this browser's" or "merge" (characters joined by
+id, the one with more earned points wins a clash, settings from this browser); install
+@supabase/supabase-js 2.119.2; the privacy policy keeps a placeholder for the data controller's name
+and contact email, to fill in before anyone else signs up.
+
+Claude's calls (from `.coord/research/accounts-supabase.md`):
+- One `user_saves` row per user: `save_data jsonb` holding the same SaveData as localStorage, with
+  row-level security so a user reads and writes only their own row; the cloud save is untrusted and
+  goes through the same validation as the local save.
+- Account deletion through a `security definer` Postgres function `delete_own_account()` (no service
+  role key anywhere in the client or the repo); deleting the auth user cascades to the save row.
+- Environment: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env.local` (git-ignored); both
+  missing means guest-only, exactly as today.
+- Sign-up needs an unchecked PDPA consent box linking the privacy policy (Thai first, English after).

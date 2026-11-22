@@ -2,7 +2,7 @@
 
 ## In progress
 <!-- - [agent] task — files owned — started YYYY-MM-DD -->
-- [agy] Phase 5 A2 account pages, privacy policy, account tab, sync flow — src/ui/**, src/game/** — started 2026-11-22
+- [agy] Phase 5 A2 account pages, privacy policy, account tab, sync flow — src/ui/**, src/game/** — started 2026-11-22 (Argon quota out, resumed on Gemini 4 Neon by user choice)
 
 ## Done
 - [sonnet] Phase 5 A1 account core (auth, cloud save, sync decisions, SQL with RLS, setup guide), 2 review rounds by opencode — main merge after 34684fb — 2026-11-22

@@ -1,5 +1,6 @@
 // Pure labels, key formatting, conflict warning and character summary helpers for the app shell.
 import type {
+  AccountUser,
   BodyType,
   CameraPreset,
   Character,
@@ -8,6 +9,7 @@ import type {
   GraphicsQuality,
   InputAction,
   KeyBindings,
+  SaveData,
   TierId,
 } from '../types';
 import type { RoundName } from '../career';
@@ -213,4 +215,43 @@ export function formatPlayerSideScore(storedScore: string | null, playerIsEntran
 
 export function formatMatchScoreForCareer(games: readonly GameScore[]): string {
   return games.map((g) => `${g.near}-${g.far}`).join(' ');
+}
+
+// ---------- Account & Cloud Sync labels ----------
+
+export function formatAccountBadge(user: AccountUser | null | undefined): string {
+  if (!user) return 'ผู้เล่นทั่วไป (Guest)';
+  return user.email ? `บัญชี: ${user.email}` : 'บัญชีออนไลน์ (Signed In)';
+}
+
+export function validateAccountForm(
+  mode: 'signin' | 'signup',
+  email: string,
+  password: string,
+  consentChecked: boolean,
+): string | null {
+  const trimmed = email.trim();
+  if (!trimmed || !trimmed.includes('@')) {
+    return 'กรุณากรอกอีเมลให้ถูกต้อง (Please enter a valid email)';
+  }
+  if (password.length < 8) {
+    return 'รหัสผ่านต้องมีความยาวอย่างน้อย 8 ตัวอักษร (Password must be at least 8 characters)';
+  }
+  if (mode === 'signup' && !consentChecked) {
+    return 'กรุณาอ่านและยอมรับนโยบายความเป็นส่วนตัวก่อนสมัครสมาชิก';
+  }
+  return null;
+}
+
+export function formatSaveSyncSummary(save: SaveData): string {
+  if (save.characters.length === 0) return 'ไม่มีตัวละคร (0 ตัวละคร)';
+  return save.characters
+    .map((c) => {
+      const pts = Number.isInteger(Math.round(c.earnedPoints * 1000) / 1000)
+        ? String(Math.round(c.earnedPoints))
+        : Number(c.earnedPoints.toFixed(2)).toString();
+      const tiers = c.career?.unlocked ?? 1;
+      return `${c.name} (+${pts}/20 แต้ม · ทัวร์นาเมนต์เปิด ${tiers}/4 ระดับ)`;
+    })
+    .join(' · ');
 }

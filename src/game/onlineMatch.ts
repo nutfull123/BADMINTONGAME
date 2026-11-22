@@ -8,6 +8,7 @@ import { FORMAT_3X15, FORMAT_3X21, createMatch, serverSlot } from '../rules';
 import { chargeLevel } from '../sim';
 import { aimView, racketFromAim } from '../sim/assist';
 import { createHud, createViewControls } from '../ui';
+import { formatOnlineTeamNames } from '../ui/onlineHelpers';
 import type { Connection } from '../net/connection';
 import { interpDelayTicks, createSnapBuffer, pushSnapshot, sample, type Sampled } from '../net/interpolation';
 import { isMirrored, mirrorIntent, mirrorMatch, mirrorPlayer, mirrorShuttle, seatSide, seatSlot } from '../net/mirror';
@@ -100,7 +101,7 @@ export function startOnlineMatch(
   const input = createInput(container.querySelector('canvas')!, prefs.controls, prefs.camera.preset);
   const look = input.look;
   let prevAim = { x: 0, y: 0 };
-  const hud = createHud(root);
+  const hud = createHud(root, formatOnlineTeamNames(room, you));
   const viewControls = createViewControls(root, (z) => renderer.setZoom(z));
 
   const buf = createSnapBuffer();
@@ -257,6 +258,7 @@ export function startOnlineMatch(
       stamina: me.staminaNow,
       charge: w.charge,
       message: reconnecting() ? 'Reconnecting...' : paused ? 'Click to play' : null,
+      names: formatOnlineTeamNames(roomRef, you),
     });
     if (look) renderer.setLook(look.yaw, look.pitch);
     renderer.render(w, dt);

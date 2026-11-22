@@ -18,9 +18,11 @@ import {
   canStartRoom,
   formatOnlineTeamNames,
   formatServerError,
+  mergeRoomSettings,
   normalizeRoomCode,
   seatStatTotal,
   validateRoomCode,
+  type RoomSettingsPatch,
 } from '../onlineHelpers';
 import { mountOverlay } from '../overlay';
 import { showResult } from '../result';
@@ -85,6 +87,7 @@ export function showOnlinePage(
     actions.onBack();
     return;
   }
+  const activeChar = active;
 
   let phase: 'connecting' | 'lobby' | 'room' | 'playing' | 'result' | 'disconnected' = 'connecting';
   let conn: Connection | null = null;
@@ -98,6 +101,10 @@ export function showOnlinePage(
   let copied = false;
   let joinCode = '';
   let disposed = false;
+  let draggingSlider = false;
+  let droppedDuringResult = false;
+  let seatsListEl: HTMLElement | null = null;
+  let startBtnEl: HTMLButtonElement | null = null;
 
   let draftSettings: RoomSettings = {
     event: save.settings.match.event,
@@ -127,6 +134,8 @@ export function showOnlinePage(
     overlay?.remove();
     overlay = null;
     panel = null;
+    seatsListEl = null;
+    startBtnEl = null;
   }
 
   function detachConn(sendLeave: boolean): void {
@@ -150,6 +159,7 @@ export function showOnlinePage(
   function leaveToMenu(): void {
     if (disposed) return;
     disposed = true;
+    draggingSlider = false;
     if (copyTimer !== null) {
       clearTimeout(copyTimer);
       copyTimer = null;
@@ -164,12 +174,38 @@ export function showOnlinePage(
     actions.onBack();
   }
 
+  function returnToLobbyKeepingConn(): void {
+    if (conn && room) {
+      conn.send({ t: 'leave' });
+    }
+    room = null;
+    you = null;
+    errorMsg = null;
+    draggingSlider = false;
+    phase = 'lobby';
+    render();
+  }
+
+  function updateSeatsInPlace(r: RoomView): void {
+    if (!seatsListEl) return;
+    seatsListEl.innerHTML = '';
+    const interactive = r.status === 'lobby';
+    r.seats.forEach((s) => seatsListEl!.appendChild(renderSeatCard(s, r, interactive)));
+    if (startBtnEl) {
+      startBtnEl.disabled = !canStartRoom(r, conn?.userId ?? null);
+    }
+  }
+
   function handleMessage(msg: ServerMessage): void {
     if (disposed) return;
     if (msg.t === 'room') {
       room = msg.room;
       you = msg.you;
       errorMsg = null;
+      if (phase === 'room' && draggingSlider && seatsListEl) {
+        updateSeatsInPlace(msg.room);
+        return;
+      }
       if (phase === 'lobby' || phase === 'room') {
         phase = 'room';
         render();
@@ -187,6 +223,8 @@ export function showOnlinePage(
       if (phase === 'playing' || !conn || !room || you === null) return;
       phase = 'playing';
       errorMsg = null;
+      draggingSlider = false;
+      droppedDuringResult = false;
       clearOverlay();
       actions.onMatchStateChange?.(true);
       const matchRoom = room;
@@ -219,6 +257,13 @@ export function showOnlinePage(
               if (disposed) return;
               if (lost || !conn) {
                 leaveToMenu();
+              } else if (droppedDuringResult) {
+                droppedDuringResult = false;
+                room = null;
+                you = null;
+                phase = 'disconnected';
+                errorMsg = 'การเชื่อมต่อกับเซิร์ฟเวอร์ขาดหาย กรุณาลองเชื่อมต่อใหม่อีกครั้ง';
+                render();
               } else {
                 phase = room ? 'room' : 'lobby';
                 render();
@@ -239,8 +284,13 @@ export function showOnlinePage(
 
   function handleDrop(): void {
     if (disposed || phase === 'playing') return;
+    if (phase === 'result') {
+      droppedDuringResult = true;
+      return;
+    }
     room = null;
     you = null;
+    draggingSlider = false;
     phase = 'disconnected';
     errorMsg = 'การเชื่อมต่อกับเซิร์ฟเวอร์ขาดหาย กรุณาลองเชื่อมต่อใหม่อีกครั้ง';
     render();
@@ -250,6 +300,8 @@ export function showOnlinePage(
     detachConn(false);
     phase = 'connecting';
     errorMsg = null;
+    draggingSlider = false;
+    droppedDuringResult = false;
     render();
 
     const url = gameServerUrl();
@@ -270,7 +322,7 @@ export function showOnlinePage(
     }
 
     try {
-      const c = await connect(url, token, { name: active!.name, stats: { ...active!.stats } });
+      const c = await connect(url, token, { name: activeChar.name, stats: { ...activeChar.stats } });
       if (disposed) {
         c.close();
         return;
@@ -293,8 +345,8 @@ export function showOnlinePage(
   }
 
   function buildSettingsControls(
-    current: RoomSettings,
-    onChange: (next: RoomSettings) => void,
+    initial: RoomSettings,
+    onPatch: (patch: RoomSettingsPatch) => void,
     commitSliderOnRelease = false,
   ): HTMLElement {
     const wrap = document.createElement('div');
@@ -305,50 +357,65 @@ export function showOnlinePage(
     const eventRow = buildChipSetting<MatchEvent>(
       'ประเภท (Event · ห้องกับเพื่อนผสมเพศได้)',
       EVENT_OPTIONS,
-      current.event,
-      (v) => onChange({ ...current, event: v }),
+      initial.event,
+      (v) => onPatch({ event: v }),
     );
 
     const formatRow = buildChipSetting<RoomSettings['format']>(
       'รูปแบบเกม (Format)',
       FORMAT_OPTIONS,
-      current.format,
-      (v) => onChange({ ...current, format: v }),
+      initial.format,
+      (v) => onPatch({ format: v }),
     );
 
     const assistRow = buildChipSetting<MatchSettings['mode']>(
       'ตัวช่วยทุกคนในห้อง (Assists · ไม่มีสโลว์โมชัน)',
       ASSIST_MODE_OPTIONS,
-      current.assists.mode,
-      (v) => onChange({ ...current, assists: { ...current.assists, mode: v } }),
+      initial.assists.mode,
+      (v) => onPatch({ mode: v }),
     );
 
-    let pendingHitAssist = current.assists.hitAssist;
+    let pendingHitAssist = initial.assists.hitAssist;
     const hitSlider = buildRangeSlider(
       'ช่วยตีโดน (Hit Assist)',
       LIMITS.hitAssist[0],
       LIMITS.hitAssist[1],
       1,
-      current.assists.hitAssist,
+      initial.assists.hitAssist,
       (v) => `${Math.round(v)}%`,
       (v) => {
         pendingHitAssist = Math.round(v);
         if (!commitSliderOnRelease) {
-          onChange({ ...current, assists: { ...current.assists, hitAssist: pendingHitAssist } });
+          onPatch({ hitAssist: pendingHitAssist });
         }
       },
     );
     if (commitSliderOnRelease) {
-      hitSlider.querySelector('input')?.addEventListener('change', () => {
-        onChange({ ...current, assists: { ...current.assists, hitAssist: pendingHitAssist } });
-      });
+      const rangeInput = hitSlider.querySelector('input');
+      if (rangeInput) {
+        const startDrag = () => {
+          draggingSlider = true;
+        };
+        const endDrag = () => {
+          draggingSlider = false;
+        };
+        rangeInput.addEventListener('pointerdown', startDrag);
+        rangeInput.addEventListener('mousedown', startDrag);
+        rangeInput.addEventListener('pointerup', endDrag);
+        rangeInput.addEventListener('mouseup', endDrag);
+        rangeInput.addEventListener('blur', endDrag);
+        rangeInput.addEventListener('change', () => {
+          draggingSlider = false;
+          onPatch({ hitAssist: pendingHitAssist });
+        });
+      }
     }
 
     const pointsRow = buildChipSetting<RoomSettings['points']>(
       'ค่าพลังตัวละคร (Stat Points)',
       POINTS_OPTIONS,
-      current.points,
-      (v) => onChange({ ...current, points: v }),
+      initial.points,
+      (v) => onPatch({ points: v }),
     );
 
     wrap.append(eventRow, formatRow, assistRow, hitSlider, pointsRow);
@@ -388,6 +455,8 @@ export function showOnlinePage(
   }
 
   function renderLobby(p: HTMLElement): void {
+    seatsListEl = null;
+    startBtnEl = null;
     renderHeader(p, 'ออนไลน์ · ห้องกับเพื่อน (Online Rooms)', '← กลับเมนูหลัก');
 
     // Join by 6-character code
@@ -449,7 +518,7 @@ export function showOnlinePage(
     joinSection.append(joinTitle, joinForm);
     p.appendChild(joinSection);
 
-    // Create room with host settings
+    // Create room with host settings (every edit merges against live draftSettings)
     const createSection = document.createElement('div');
     createSection.className = 'bm-char-card';
     createSection.style.flexDirection = 'column';
@@ -460,8 +529,8 @@ export function showOnlinePage(
     createTitle.className = 'bm-active-char-tag';
     createTitle.textContent = 'สร้างห้องใหม่ (Create Room)';
 
-    const settingsEl = buildSettingsControls(draftSettings, (next) => {
-      draftSettings = next;
+    const settingsEl = buildSettingsControls(draftSettings, (patch) => {
+      draftSettings = mergeRoomSettings(draftSettings, patch);
     });
 
     const createBtn = document.createElement('button');
@@ -479,7 +548,7 @@ export function showOnlinePage(
     p.appendChild(createSection);
   }
 
-  function renderSeatCard(s: RoomSeat, r: RoomView): HTMLElement {
+  function renderSeatCard(s: RoomSeat, r: RoomView, interactive: boolean): HTMLElement {
     const isMe = you === s.seat;
     const isBot = s.userId === null;
     const isHostSeat = s.userId !== null && s.userId === r.hostId;
@@ -533,39 +602,45 @@ export function showOnlinePage(
     meta.style.color = '#94a3b8';
     const statSum = seatStatTotal(s.stats);
     if (isBot) {
-      meta.textContent = `พลังรวม ${statSum} แต้ม · ว่าง (คลิกเพื่อย้ายมานั่งที่นี่)`;
-    } else {
+      meta.textContent = interactive
+        ? `พลังรวม ${statSum} แต้ม · ว่าง (คลิกเพื่อย้ายมานั่งที่นี่)`
+        : `พลังรวม ${statSum} แต้ม · บอท`;
+    } else if (interactive) {
       const readyText = s.ready ? 'พร้อมแล้ว' : 'ยังไม่พร้อม';
       const connText = s.connected ? 'เชื่อมต่อแล้ว' : 'หลุดการเชื่อมต่อ';
       meta.textContent = `พลังรวม ${statSum} แต้ม · ${readyText} · ${connText}`;
+    } else {
+      meta.textContent = `พลังรวม ${statSum} แต้ม`;
     }
 
     info.append(topRow, meta);
     card.appendChild(info);
 
-    const right = document.createElement('div');
-    right.className = 'bm-btn-row';
-    if (isBot) {
-      const pickBtn = document.createElement('button');
-      pickBtn.type = 'button';
-      pickBtn.className = 'bm-btn bm-btn-sm';
-      pickBtn.dataset.testid = `online-pick-seat-${s.seat}`;
-      pickBtn.textContent = 'เลือกที่นั่งนี้';
-      pickBtn.addEventListener('click', () => {
-        conn?.send({ t: 'seat', seat: s.seat });
-      });
-      right.appendChild(pickBtn);
-    } else {
-      const readyPill = document.createElement('span');
-      readyPill.className = 'bm-soon-pill';
-      readyPill.style.background = s.ready
-        ? 'rgba(34, 197, 94, 0.22)'
-        : 'rgba(148, 163, 184, 0.18)';
-      readyPill.style.color = s.ready ? '#4ade80' : '#cbd5e1';
-      readyPill.textContent = s.ready ? '✓ พร้อม' : 'รอพร้อม';
-      right.appendChild(readyPill);
+    if (interactive) {
+      const right = document.createElement('div');
+      right.className = 'bm-btn-row';
+      if (isBot) {
+        const pickBtn = document.createElement('button');
+        pickBtn.type = 'button';
+        pickBtn.className = 'bm-btn bm-btn-sm';
+        pickBtn.dataset.testid = `online-pick-seat-${s.seat}`;
+        pickBtn.textContent = 'เลือกที่นั่งนี้';
+        pickBtn.addEventListener('click', () => {
+          conn?.send({ t: 'seat', seat: s.seat });
+        });
+        right.appendChild(pickBtn);
+      } else {
+        const readyPill = document.createElement('span');
+        readyPill.className = 'bm-soon-pill';
+        readyPill.style.background = s.ready
+          ? 'rgba(34, 197, 94, 0.22)'
+          : 'rgba(148, 163, 184, 0.18)';
+        readyPill.style.color = s.ready ? '#4ade80' : '#cbd5e1';
+        readyPill.textContent = s.ready ? '✓ พร้อม' : 'รอพร้อม';
+        right.appendChild(readyPill);
+      }
+      card.appendChild(right);
     }
-    card.appendChild(right);
 
     return card;
   }
@@ -573,7 +648,23 @@ export function showOnlinePage(
   function renderRoom(p: HTMLElement): void {
     const r = room;
     if (!r) return;
-    renderHeader(p, 'ห้องแข่งขันออนไลน์ (Room Lobby)', 'ออกจากห้อง (Leave)');
+    const isFinished = r.status === 'finished';
+    renderHeader(
+      p,
+      isFinished ? 'จบการแข่งขัน (Match Finished)' : 'ห้องแข่งขันออนไลน์ (Room Lobby)',
+      'ออกจากห้อง (Leave)',
+    );
+
+    if (isFinished) {
+      const finishedNote = document.createElement('div');
+      finishedNote.className = 'bm-notice';
+      finishedNote.dataset.testid = 'online-room-finished';
+      finishedNote.style.marginTop = '0';
+      finishedNote.style.marginBottom = '16px';
+      finishedNote.textContent =
+        'การแข่งขันในห้องนี้จบลงแล้ว กรุณาสร้างห้องใหม่หรือกลับล็อบบี้เพื่อเริ่มแมตช์ถัดไป (Match finished — return to the lobby to create a new room.)';
+      p.appendChild(finishedNote);
+    }
 
     // Large room code bar + Copy button
     const codeBar = document.createElement('div');
@@ -611,7 +702,7 @@ export function showOnlinePage(
       if (copyTimer !== null) clearTimeout(copyTimer);
       copyTimer = setTimeout(() => {
         copied = false;
-        if (!disposed && phase === 'room') render();
+        if (!disposed && phase === 'room' && !draggingSlider) render();
       }, 2000);
       render();
     });
@@ -628,8 +719,34 @@ export function showOnlinePage(
 
     const seatsList = document.createElement('div');
     seatsList.className = 'bm-char-list';
-    r.seats.forEach((s) => seatsList.appendChild(renderSeatCard(s, r)));
+    r.seats.forEach((s) => seatsList.appendChild(renderSeatCard(s, r, !isFinished)));
+    seatsListEl = seatsList;
     p.appendChild(seatsList);
+
+    if (isFinished) {
+      startBtnEl = null;
+      const finishedActions = document.createElement('div');
+      finishedActions.className = 'bm-btn-row';
+      finishedActions.style.marginTop = '20px';
+
+      const newRoomBtn = document.createElement('button');
+      newRoomBtn.type = 'button';
+      newRoomBtn.className = 'bm-btn bm-btn-primary';
+      newRoomBtn.dataset.testid = 'online-return-lobby';
+      newRoomBtn.textContent = 'สร้างห้องใหม่ / กลับล็อบบี้';
+      newRoomBtn.addEventListener('click', returnToLobbyKeepingConn);
+
+      const leaveBtn = document.createElement('button');
+      leaveBtn.type = 'button';
+      leaveBtn.className = 'bm-btn';
+      leaveBtn.dataset.testid = 'online-leave';
+      leaveBtn.textContent = 'กลับเมนูหลัก (Main Menu)';
+      leaveBtn.addEventListener('click', leaveToMenu);
+
+      finishedActions.append(newRoomBtn, leaveBtn);
+      p.appendChild(finishedActions);
+      return;
+    }
 
     // Settings (editable for host, read-only for others)
     const isHost = conn?.userId !== null && conn?.userId === r.hostId;
@@ -643,8 +760,9 @@ export function showOnlinePage(
     if (isHost) {
       const hostSettings = buildSettingsControls(
         r.settings,
-        (next) => {
-          conn?.send({ t: 'settings', settings: next });
+        (patch) => {
+          const live = room?.settings ?? r.settings;
+          conn?.send({ t: 'settings', settings: mergeRoomSettings(live, patch) });
         },
         true,
       );
@@ -677,6 +795,7 @@ export function showOnlinePage(
       actionRow.appendChild(readyBtn);
     }
 
+    startBtnEl = null;
     if (isHost) {
       const startBtn = document.createElement('button');
       startBtn.type = 'button';
@@ -688,6 +807,7 @@ export function showOnlinePage(
         errorMsg = null;
         conn?.send({ t: 'start' });
       });
+      startBtnEl = startBtn;
       actionRow.appendChild(startBtn);
     }
 
@@ -707,6 +827,8 @@ export function showOnlinePage(
     const p = ensurePanel();
 
     if (phase === 'connecting') {
+      seatsListEl = null;
+      startBtnEl = null;
       renderHeader(p, 'ออนไลน์ · ห้องกับเพื่อน (Online Rooms)', '← กลับเมนูหลัก');
       const status = document.createElement('div');
       status.className = 'bm-setting-row';
@@ -717,6 +839,8 @@ export function showOnlinePage(
     }
 
     if (phase === 'disconnected') {
+      seatsListEl = null;
+      startBtnEl = null;
       renderHeader(p, 'ออนไลน์ · ห้องกับเพื่อน (Online Rooms)', '← กลับเมนูหลัก');
       const retryRow = document.createElement('div');
       retryRow.className = 'bm-btn-row';

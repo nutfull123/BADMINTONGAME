@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { RoomSeat, RoomView, ServerErrorCode } from '../net/protocol';
 import type { Stats } from '../types';
 import {
+  ROOM_CODE_ALPHABET,
   SERVER_ERROR_LABELS,
   buildOnlineResultMatch,
   canStartRoom,
   formatOnlineTeamNames,
   formatServerError,
+  mergeRoomSettings,
   normalizeRoomCode,
   onlineMenuStatus,
   seatStatTotal,
@@ -71,7 +73,8 @@ describe('room code normalization and validation', () => {
     expect(normalizeRoomCode(' ab2 3cd ')).toBe('AB23CD');
   });
 
-  it('accepts valid 6-char codes without look-alikes and rejects invalid ones', () => {
+  it('accepts valid 6-char codes matching the server alphabet and rejects look-alikes including L', () => {
+    expect(ROOM_CODE_ALPHABET).toBe('ABCDEFGHJKMNPQRSTUVWXYZ23456789');
     expect(validateRoomCode('AB23CD')).toBeNull();
     expect(validateRoomCode('HJKMNP')).toBeNull();
     expect(validateRoomCode('AB23C')).toContain('6');
@@ -80,7 +83,26 @@ describe('room code normalization and validation', () => {
     expect(validateRoomCode('ABO3CD')).toContain('O');
     expect(validateRoomCode('AB13CD')).toContain('1');
     expect(validateRoomCode('ABI3CD')).toContain('I');
+    expect(validateRoomCode('ABL3CD')).toContain('L');
     expect(validateRoomCode('AB-3CD')).not.toBeNull();
+  });
+});
+
+describe('mergeRoomSettings', () => {
+  it('keeps earlier edits when applying multiple setting patches in a row', () => {
+    const initial = makeRoom([]).settings;
+    const afterEvent = mergeRoomSettings(initial, { event: 'XD' });
+    const afterFormat = mergeRoomSettings(afterEvent, { format: '3x21' });
+    const afterMode = mergeRoomSettings(afterFormat, { mode: 'pro' });
+    const afterHit = mergeRoomSettings(afterMode, { hitAssist: 25 });
+    const afterPoints = mergeRoomSettings(afterHit, { points: 'twenty' });
+
+    expect(afterPoints).toEqual({
+      event: 'XD',
+      format: '3x21',
+      assists: { mode: 'pro', hitAssist: 25 },
+      points: 'twenty',
+    });
   });
 });
 

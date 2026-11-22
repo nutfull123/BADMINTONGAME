@@ -1,7 +1,7 @@
 // Pure helpers for the online lobby, room page, HUD side names, and match results (no DOM, no WebSocket).
 import { FORMAT_3X15, FORMAT_3X21, createMatch } from '../rules';
-import type { RoomSeat, RoomView, SeatIndex, ServerErrorCode } from '../net/protocol';
-import type { GameScore, MatchState, Side, Stats } from '../types';
+import type { RoomSeat, RoomSettings, RoomView, SeatIndex, ServerErrorCode } from '../net/protocol';
+import type { GameScore, MatchEvent, MatchSettings, MatchState, Side, Stats } from '../types';
 
 export interface OnlineMenuStatus {
   enabled: boolean;
@@ -26,8 +26,9 @@ export function normalizeRoomCode(raw: string): string {
   return raw.replace(/\s+/g, '').toUpperCase();
 }
 
-const VALID_ROOM_CODE = /^[A-HJ-NP-Z2-9]{6}$/;
-const LOOK_ALIKE = /[0O1I]/;
+export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const VALID_ROOM_CODE = /^[A-HJ-KM-NP-Z2-9]{6}$/;
+const LOOK_ALIKE = /[0O1IL]/;
 
 export function validateRoomCode(raw: string): string | null {
   const code = normalizeRoomCode(raw);
@@ -35,12 +36,32 @@ export function validateRoomCode(raw: string): string | null {
     return 'รหัสห้องต้องมี 6 ตัวอักษร (Room code must be 6 characters)';
   }
   if (LOOK_ALIKE.test(code)) {
-    return 'รหัสห้องไม่ใช้ตัวอักษรที่คล้ายกัน (0, O, 1, I)';
+    return 'รหัสห้องไม่ใช้ตัวอักษรที่คล้ายกัน (0, O, 1, I, L)';
   }
   if (!VALID_ROOM_CODE.test(code)) {
     return 'รหัสห้องใช้ได้เฉพาะตัวอักษรภาษาอังกฤษพิมพ์ใหญ่และตัวเลข (A–Z, 2–9)';
   }
   return null;
+}
+
+export interface RoomSettingsPatch {
+  event?: MatchEvent;
+  format?: RoomSettings['format'];
+  mode?: MatchSettings['mode'];
+  hitAssist?: number;
+  points?: RoomSettings['points'];
+}
+
+export function mergeRoomSettings(base: RoomSettings, patch: RoomSettingsPatch): RoomSettings {
+  return {
+    event: patch.event ?? base.event,
+    format: patch.format ?? base.format,
+    assists: {
+      mode: patch.mode ?? base.assists.mode,
+      hitAssist: patch.hitAssist ?? base.assists.hitAssist,
+    },
+    points: patch.points ?? base.points,
+  };
 }
 
 export const SERVER_ERROR_LABELS: Record<ServerErrorCode, string> = {

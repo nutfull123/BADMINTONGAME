@@ -32,6 +32,7 @@ export function showResult(
   const youWon = winnerSide === 'near';
   const nearName = extras?.sideNames?.near ?? 'คุณ';
   const farName = extras?.sideNames?.far ?? 'บอท';
+  const formatWinnerName = (name: string): string => (name.includes(' / ') ? `ทีม ${name}` : name);
 
   const title = document.createElement('h1');
   title.className = 'bm-title';
@@ -41,10 +42,10 @@ export function showResult(
       ? 'จบการแข่งขัน (Match Ended)'
       : youWon
         ? extras?.sideNames?.near
-          ? `${nearName} ชนะ! (YOU WIN)`
+          ? `${formatWinnerName(nearName)} ชนะ! (YOU WIN)`
           : 'คุณชนะ! (YOU WIN)'
         : extras?.sideNames?.far
-          ? `${farName} ชนะ`
+          ? `${formatWinnerName(farName)} ชนะ`
           : 'บอทชนะ (BOT WINS)';
 
   const sub = document.createElement('p');

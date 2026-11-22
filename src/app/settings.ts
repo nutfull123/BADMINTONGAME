@@ -49,7 +49,7 @@ export const CAMERA_PRESETS: readonly CameraPreset[] = ['shoulder', 'behindLow',
 export const GRAPHICS_QUALITIES: readonly GraphicsQuality[] = ['low', 'medium', 'high'];
 const MODES: readonly MatchSettings['mode'][] = ['easy', 'normal', 'pro', 'timing'];
 const EVENTS: readonly MatchEvent[] = ['MS', 'WS', 'MD', 'WD', 'XD'];
-const FORMATS: readonly MatchSettings['format'][] = ['3x15', '3x21'];
+const FORMATS: readonly GameSettings['match']['format'][] = ['3x15', '3x21'];
 const BOT_LEVELS: readonly MatchSettings['botLevel'][] = ['easy', 'medium', 'hard'];
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);

@@ -202,3 +202,31 @@ design check with the user before they start (especially phases 5 and 6).
 - Partner bot tuning and doubles rotation details beyond front-back / side-by-side.
 - How downloaded animations are retargeted and blended with procedural footwork and IK.
 - Tournament tier names (fictional, no real event or brand names) and point amounts (in `tuning.ts`).
+
+## Phase 4 detail (design check 2026-11-22)
+
+User's answers: about 40 matches to go from 20 to 40 points; four tiers unlocked one at a time;
+early tournament rounds are one game, semi-finals and the final are full matches.
+
+| Tier | Size | Bots | Bot points | Unlocked by |
+|---|---|---|---|---|
+| Club Open | 8 | easy | about 20 | open from the start |
+| Regional Cup | 16 | medium | about 26 | reaching the Club Open semi-finals |
+| National Championship | 16 | hard | about 32 | reaching the Regional Cup semi-finals |
+| Grand Masters | 32 | hard | about 38 | reaching the National Championship semi-finals |
+
+Claude's calls (numbers live in `src/career/tuning.ts`):
+- Match points, quick matches and tournament matches alike: a win against easy / medium / hard bots
+  earns 0.25 / 0.5 / 0.75; a loss earns a quarter of that. Placement bonus at the end of a tournament:
+  champion 0.5 / 1 / 1.5 / 2 by tier, finalist half of that, semi-finalist a quarter. Earned points are
+  capped at 20 (40 in total); stats stay whole numbers, so a fractional total shows as progress to the
+  next point.
+- Rounds before the semi-finals are one game to 15 (BWF 15-point game: deuce at 14, cap 21, interval
+  at 8); semi-finals and the final use the player's format (3x15 by default).
+- Other bracket matches are simulated from the entrants' stat totals with the tournament seed;
+  scores look like real games. Bot names are generated and fictional, never real players.
+- Event gender rules apply; in doubles the partner is a bot of the tier's strength.
+- Progress is saved after every match the player finishes; leaving mid-match replays that match.
+  The player can abandon a tournament (counts as out in the current round, no bonus).
+- Points go to the active character only; nothing is earned online (phase 7 uses a separate
+  20-point ranked set).

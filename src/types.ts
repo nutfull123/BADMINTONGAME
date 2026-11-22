@@ -155,7 +155,7 @@ export interface MatchSettings {
   hitAssist: number;        // 0..100
   landingMarker: boolean;
   timingRing: boolean;
-  format: '3x15' | '3x21';
+  format: '1x15' | '3x15' | '3x21'; // '1x15' (one game) only for early career rounds, never a saved setting
   botLevel: 'easy' | 'medium' | 'hard';
   mode: 'easy' | 'normal' | 'pro' | 'timing'; // assist mode
   event: MatchEvent;        // must fit the character's gender
@@ -188,7 +188,7 @@ export interface GameSettings {
   controls: ControlSettings;
   assists: { mode: MatchSettings['mode']; hitAssist: number; landingMarker: boolean; timingRing: boolean; racketAid: boolean };
   graphics: { quality: GraphicsQuality };
-  match: { event: MatchEvent; format: MatchSettings['format']; botLevel: MatchSettings['botLevel'] };
+  match: { event: MatchEvent; format: '3x15' | '3x21'; botLevel: MatchSettings['botLevel'] }; // no '1x15': career only
 }
 
 export interface Character {
@@ -196,6 +196,7 @@ export interface Character {
   name: string;
   stats: Stats;        // gender and body fixed after creation
   earnedPoints: number; // extra stat points from offline play (phase 4); budget = 20 + earnedPoints, max 40
+  career?: CareerProgress; // offline tournaments (phase 4); missing = nothing played yet
   createdAt: number;   // ms since epoch
 }
 
@@ -219,3 +220,32 @@ export interface SaveData {
 //            (gender/body cannot change); deleteCharacter; setActiveCharacter (unknown id: unchanged);
 //            activeCharacter(save): Character | null. create/update throw on invalid stats: check statsError first.
 // Camera offsets: height +1 = about 2 m higher, distance +1 = about 3 m farther than the preset (render decides).
+
+// ---------- career/ (pure, phase 4): offline tournaments against bots and earned stat points ----------
+// Saved per character (Character.career), so it is untrusted on load: career/ validates it (parseCareer).
+export type TierId = 'club' | 'regional' | 'national' | 'masters'; // unlocked in this order
+export interface TeamPlayer { name: string; stats: Stats }       // fictional bot names only
+export interface Entrant {
+  id: string;
+  human: boolean;            // true for the player's side (in doubles: the player + a bot partner)
+  players: TeamPlayer[];     // 1 in singles, 2 in doubles; for the human entrant players[0] is the character
+}
+export interface BracketMatch {
+  a: number;                 // index into Tournament.entrants
+  b: number;
+  winner: number | null;     // index of a or b, null while not played
+  score: string | null;      // e.g. "15-12" or "15-12 13-15 15-9"
+}
+export interface Tournament {
+  tier: TierId;
+  event: MatchEvent;
+  seed: number;              // drives the draw, bot stats and simulated results
+  entrants: Entrant[];       // 8, 16 or 32
+  rounds: BracketMatch[][];  // rounds[0] = first round ... last = final; later rounds fill in as they are decided
+  status: 'playing' | 'won' | 'out';
+}
+export interface CareerProgress {
+  unlocked: number;          // how many tiers are open, 1..4 (club is always open)
+  best: Partial<Record<TierId, number>>; // best round reached per tier: 0 = first round ... rounds.length = champion
+  current: Tournament | null;
+}

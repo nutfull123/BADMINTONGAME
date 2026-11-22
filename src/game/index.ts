@@ -1,15 +1,9 @@
 // App shell flow: Home -> Main menu -> (Create character if none) -> Play vs Bots / Tutorial / Tournaments / My Characters / Settings.
-import { activeCharacter, awardPoints, characterBudget, setCareer } from '../app/characters';
+import { activeCharacter, awardPoints, characterBudget } from '../app/characters';
 import { loadSave, writeSave } from '../app/save';
 import { toMatchSettings } from '../app/settings';
-import {
-  finishTournament,
-  humanMatch,
-  matchPoints,
-  newCareer,
-  recordHumanResult,
-} from '../career';
-import type { CareerProgress, SaveData } from '../types';
+import { matchPoints } from '../career';
+import type { SaveData } from '../types';
 import {
   showCareerPage,
   showCharacters,
@@ -21,6 +15,7 @@ import {
   type ResultExtras,
 } from '../ui';
 import { fitEvent } from '../ui/events';
+import { applyCareerResult } from './careerFlow';
 import { startMatch, type MatchOutcome } from './match';
 import { startTutorial } from './tutorial';
 
@@ -133,48 +128,15 @@ export function startGame(root: HTMLElement): void {
           opponents: next.opponent.players.map((p) => p.stats),
         },
         onFinish: ({ won, score }: MatchOutcome): ResultExtras => {
-          const pts = matchPoints(next.botLevel, won);
-          let nextSave = awardPoints(save, characterId, pts);
-          const charNow = nextSave.characters.find((c) => c.id === characterId);
-          const prevCareer: CareerProgress = charNow?.career ?? newCareer();
-
-          const recorded = recordHumanResult(tournament, won, score);
-          if (recorded.status === 'playing') {
-            const upcoming = humanMatch(recorded, nextSave.settings.match.format);
-            const nextCareer: CareerProgress = { ...prevCareer, current: recorded };
-            nextSave = setCareer(nextSave, characterId, nextCareer);
-            updateSave(nextSave);
-            const afterChar = nextSave.characters.find((c) => c.id === characterId);
-            return {
-              pointsEarned: pts,
-              totalEarned: afterChar?.earnedPoints ?? pts,
-              buttonLabel: 'กลับสู่สายการแข่งขัน (Back to Bracket)',
-              tournament: {
-                outcome: 'advanced',
-                roundName: upcoming?.roundName ?? next.roundName,
-              },
-            };
-          }
-
-          // Tournament ended ('won' or 'out')
-          const finished = finishTournament({ ...prevCareer, current: recorded }, recorded);
-          nextSave = setCareer(nextSave, characterId, finished.career);
-          if (finished.bonus > 0) {
-            nextSave = awardPoints(nextSave, characterId, finished.bonus);
-          }
-          updateSave(nextSave);
-          const afterChar = nextSave.characters.find((c) => c.id === characterId);
-          return {
-            pointsEarned: pts,
-            totalEarned: afterChar?.earnedPoints ?? pts,
-            buttonLabel: 'กลับสู่หน้าทัวร์นาเมนต์ (Back to Tournaments)',
-            tournament: {
-              outcome: recorded.status === 'won' ? 'champion' : 'out',
-              roundName: next.roundName,
-              placementBonus: finished.bonus,
-              unlockedTier: finished.unlocked,
-            },
-          };
+          const applied = applyCareerResult(
+            save,
+            characterId,
+            { won, score },
+            save.settings.match.format,
+            tournament,
+          );
+          updateSave(applied.save);
+          return applied.extras;
         },
       },
       openCareer,

@@ -198,7 +198,7 @@ export function formatEarnedPointsSummary(earnedPoints: number, maxEarned = 20):
     text: `แต้มสะสม: ${formatted} / ${maxEarned} (+${whole} แต้มพลัง)`,
     progressText: isMax
       ? 'แต้มสะสมเต็มแล้ว (Max 20/20)'
-      : `ความคืบหน้าแต้มถัดไป: ${progressPct}% (${Math.round(frac * 100)} / 100)`,
+      : `ความคืบหน้าแต้มถัดไป ${progressPct}%`,
   };
 }
 

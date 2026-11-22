@@ -16,6 +16,15 @@ export const FORMAT_3X21: MatchConfig = {
   intervalAt: 11,
 };
 
+// One game to 15, used for the early career rounds. The single game is the deciding game, so ends change at the interval.
+export const FORMAT_1X15: MatchConfig = {
+  pointsToWin: 15,
+  deuceAt: 14,
+  cap: 21,
+  gamesToWin: 1,
+  intervalAt: 8,
+};
+
 const opposite = (side: Side): Side => (side === 'near' ? 'far' : 'near');
 
 // A game is won by two points from pointsToWin on, or by whoever reaches the cap

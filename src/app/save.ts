@@ -2,6 +2,7 @@
 // passed in. Saved data is untrusted: loadSave validates everything and never throws, so a broken or tampered
 // save starts fresh (or drops the broken parts) instead of breaking the game.
 import type { Character, SaveData } from '../types';
+import { parseCareer } from '../career';
 import { characterBudget, statsError } from './characters';
 import { DEFAULT_GAME_SETTINGS, sanitizeSettings } from './settings';
 
@@ -53,7 +54,12 @@ export function loadSave(storage: StorageLike | null = browserStorage()): SaveDa
   const characters = (Array.isArray(raw.characters) ? raw.characters : [])
     .filter(validCharacter)
     .filter((c) => !seen.has(c.id) && Boolean(seen.add(c.id)))
-    .map((c) => ({ id: c.id, name: c.name, stats: { ...c.stats }, earnedPoints: c.earnedPoints, createdAt: c.createdAt }));
+    .map((c): Character => {
+      const career = parseCareer(c.career); // a tampered career is dropped, the character kept
+      return {
+        id: c.id, name: c.name, stats: { ...c.stats }, earnedPoints: c.earnedPoints, ...(career ? { career } : {}), createdAt: c.createdAt,
+      };
+    });
   const active = characters.some((c) => c.id === raw.activeCharacterId)
     ? (raw.activeCharacterId as string)
     : characters[0]?.id ?? null;

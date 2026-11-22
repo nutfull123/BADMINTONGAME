@@ -2,9 +2,12 @@
 
 ## In progress
 <!-- - [agent] task — files owned — started YYYY-MM-DD -->
-- [agy] Phase 5 A2 account pages, privacy policy, account tab, sync flow — src/ui/**, src/game/** — started 2026-11-22 (Argon quota out, resumed on Gemini 4 Neon by user choice)
+
+## Waiting on the user
+- Phase 5 test with a real Supabase project: create it, run supabase/migrations/0001_user_saves.sql, providers and URLs per docs/supabase-setup.md, fill .env.local; then claude tests sign-up, Google, sync and delete
 
 ## Done
+- [agy] Phase 5 A2 account pages, privacy policy, Account tab, sign-in sync (Argon then Neon), 2 review rounds by Sonnet — main merge after f920dc0 — 2026-11-22
 - [sonnet] Phase 5 A1 account core (auth, cloud save, sync decisions, SQL with RLS, setup guide), 2 review rounds by opencode — main merge after 34684fb — 2026-11-22
 - [all] Phase 4 career and progression complete: K1 career core (sonnet), K2 + K2b pages, flow and tests (agy), S1 serve fix (opencode); every branch cross-reviewed — main 2026-11-22
 - [opencode] S1 serve contact at or below 1.15 m at any assist (BWF 9.1.6) — launch contact capped in sim/makeHit, non-serve hits unchanged — agent/opencode cde1e29 — 2026-11-22

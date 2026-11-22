@@ -47,9 +47,9 @@ describe('game server', () => {
     const closed = new Promise<number>((res) => ws.on('close', (code) => res(code)));
     const waiters: (() => void)[] = [];
     ws.on('message', (d) => { msgs.push(JSON.parse(d.toString())); waiters.splice(0).forEach((w) => w()); });
-    const next = async (t: ServerMessage['t']) => {
+    const next = async (t: ServerMessage['t'], pred: (m: ServerMessage) => boolean = () => true) => {
       for (;;) {
-        const i = msgs.findIndex((m) => m.t === t);
+        const i = msgs.findIndex((m) => m.t === t && pred(m));
         if (i >= 0) return msgs.splice(i, 1)[0];
         await new Promise<void>((r) => waiters.push(r));
       }
@@ -134,8 +134,10 @@ describe('game server', () => {
     const code = ((await a.next('room')) as Extract<ServerMessage, { t: 'room' }>).room.code;
     b.ws.send(JSON.stringify({ t: 'join', code }));
     const token = ((await b.next('room')) as Extract<ServerMessage, { t: 'room' }>).resumeToken;
+    const allReady = (m: ServerMessage) => m.t === 'room' && m.room.seats.every((x) => x.ready);
     a.ws.send(JSON.stringify({ t: 'ready', ready: true }));
     b.ws.send(JSON.stringify({ t: 'ready', ready: true }));
+    await a.next('room', allReady); // both ready marks arrived (they travel on different sockets)
     a.ws.send(JSON.stringify({ t: 'start' }));
     await b.next('start');
     b.ws.terminate();

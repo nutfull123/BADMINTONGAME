@@ -2,13 +2,13 @@
 
 ## In progress
 <!-- - [agent] task — files owned — started YYYY-MM-DD -->
-- [sonnet] Phase 6 N1 game server — server/**, tsconfig.server.json, vite.server.config.ts, Dockerfile, fly.toml, docs/deploy.md, package.json scripts — started 2026-11-22
 - [agy] Phase 6 N3 online lobby pages, room page, HUD names, menu wiring — src/ui/**, src/game/index.ts — started 2026-11-22
 
 ## Waiting on the user
 - Phase 5 test with a real Supabase project: create it, run supabase/migrations/0001_user_saves.sql, providers and URLs per docs/supabase-setup.md, fill .env.local; then claude tests sign-up, Google, sync and delete
 
 ## Done
+- [sonnet] Phase 6 N1 game server (protocol validation, auth, rooms, 120 Hz loop, lag compensation, Docker/fly.toml, deploy guide), reviewed by agy — main merge after 59ebd68 — 2026-11-23
 - [sonnet] Phase 6 N2 online client core (connection, clock, prediction, interpolation, mirror, startOnlineMatch), reviewed by agy — main merge after 5220112 — 2026-11-22
 - [agy] Phase 5 A2 account pages, privacy policy, Account tab, sign-in sync (Argon then Neon), 2 review rounds by Sonnet — main merge after f920dc0 — 2026-11-22
 - [sonnet] Phase 5 A1 account core (auth, cloud save, sync decisions, SQL with RLS, setup guide), 2 review rounds by opencode — main merge after 34684fb — 2026-11-22
@@ -33,6 +33,9 @@
 - [claude] Lead session moved: old chat 31c33d33 (started in ~) continues in the BADMINTONGAME project session — 2026-11-20
 
 ## Follow-ups (from final review, not blocking)
+- Phase 6: no serve timeout online (a human who never serves stalls the rally; a bot should serve after ~20 s)
+- Phase 6: no rematch in a finished room (players leave and create a new room)
+- Phase 6: Dockerfile and fly.toml not run yet (first real deploy will test them)
 - Phase 2: "Click to play" pause message covers the human player; overlays lack role=dialog / live regions
 - Phase 2: low graphics still updates hidden shadow/trail buffers each frame; camera wiring duplicated in match.ts and tutorial.ts
 - Phase 1: HUD scoreboard covers the far back player at the top of the screen; far baseline sits under the HUD

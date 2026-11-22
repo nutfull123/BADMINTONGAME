@@ -3,12 +3,13 @@
 ## In progress
 <!-- - [agent] task — files owned — started YYYY-MM-DD -->
 - [sonnet] Phase 6 N1 game server — server/**, tsconfig.server.json, vite.server.config.ts, Dockerfile, fly.toml, docs/deploy.md, package.json scripts — started 2026-11-22
-- [sonnet] Phase 6 N2 online client core — src/net/** (not protocol.ts), src/game/onlineMatch.ts, src/account/auth.ts (getAccessToken) — started 2026-11-22
+- [agy] Phase 6 N3 online lobby pages, room page, HUD names, menu wiring — src/ui/**, src/game/index.ts — started 2026-11-22
 
 ## Waiting on the user
 - Phase 5 test with a real Supabase project: create it, run supabase/migrations/0001_user_saves.sql, providers and URLs per docs/supabase-setup.md, fill .env.local; then claude tests sign-up, Google, sync and delete
 
 ## Done
+- [sonnet] Phase 6 N2 online client core (connection, clock, prediction, interpolation, mirror, startOnlineMatch), reviewed by agy — main merge after 5220112 — 2026-11-22
 - [agy] Phase 5 A2 account pages, privacy policy, Account tab, sign-in sync (Argon then Neon), 2 review rounds by Sonnet — main merge after f920dc0 — 2026-11-22
 - [sonnet] Phase 5 A1 account core (auth, cloud save, sync decisions, SQL with RLS, setup guide), 2 review rounds by opencode — main merge after 34684fb — 2026-11-22
 - [all] Phase 4 career and progression complete: K1 career core (sonnet), K2 + K2b pages, flow and tests (agy), S1 serve fix (opencode); every branch cross-reviewed — main 2026-11-22

@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:server": "tsc --noEmit -p tsconfig.server.json && vite build --config vite.server.config.ts",
+    "start:server": "node dist-server/index.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

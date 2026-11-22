@@ -4,7 +4,7 @@ import { receiverSlot, serverSlot } from '../rules';
 import { recoverBetweenPoints, stepPlayer } from '../sim';
 import type { BotContext } from '../sim/bot';
 import { SERVE_MAX_CONTACT } from '../sim/tuning';
-import type { Intent, MatchState, PlayerState, ServiceCourt, ShuttleState, Side, Slot, Vec3 } from '../types';
+import type { Intent, MatchState, PlayerState, ServiceCourt, ShuttleEvent, ShuttleState, Side, Slot, Vec3 } from '../types';
 
 export const STEP = 1 / 120; // fixed simulation step
 const SERVE_AIM_FLICK = 2.4; // racketVel.x bias (~20 degrees): lands both short and long serves in the diagonal box
@@ -114,18 +114,26 @@ export function serveStance(
   return placeFeet(p, clamp(p.pos.x, b.xMin + m, b.xMax - m), clamp(p.pos.z, b.zMin + m, b.zMax - m));
 }
 
-export function stepRally(r: Rally, intents: Record<Side, Intent[]>, dt: number, assist: number): void {
+// Online lag compensation: a player may judge a swing against the shuttle it saw `ticks` steps ago. A hit then starts
+// from that old position and the shuttle is carried forward `ticks` steps to the present. Offline never passes it.
+export interface ShuttleView { shuttle: ShuttleState; ticks: number }
+
+export function stepRally(
+  r: Rally, intents: Record<Side, Intent[]>, dt: number, assist: number,
+  seen?: (side: Side, slot: Slot) => ShuttleView | null,
+): void {
   if (r.result) return;
   const receiverSide = other(r.server);
   const serverIntent = intents[r.server][r.serverSlot];
-  const hits: { side: Side; slot: Slot; launch: ShuttleState }[] = [];
+  const hits: { side: Side; slot: Slot; launch: ShuttleState; ticks: number }[] = [];
   for (const side of SIDES) {
     r.players[side] = r.players[side].map((before, i) => {
       const slot = i as Slot;
-      const out = stepPlayer(before, intents[side][i], r.shuttle, dt, assist, r.doubles);
+      const view = seen?.(side, slot) ?? null;
+      const out = stepPlayer(before, intents[side][i], view?.shuttle ?? r.shuttle, dt, assist, r.doubles);
       const isServer = side === r.server && slot === r.serverSlot;
       const isReceiver = side === receiverSide && slot === r.receiverSlot;
-      if (out.hit && (r.stage !== 'serve' || isServer)) hits.push({ side, slot, launch: out.hit.launch });
+      if (out.hit && (r.stage !== 'serve' || isServer)) hits.push({ side, slot, launch: out.hit.launch, ticks: view?.ticks ?? 0 });
       // partners are free to roam their own half during the serve (BWF Law 9.5); the sim keeps them off the net
       return r.stage === 'serve' && (isServer || isReceiver)
         ? serveStance(out.player, before, r.court, serverIntent, r.doubles) : out.player;
@@ -150,8 +158,12 @@ export function stepRally(r: Rally, intents: Record<Side, Intent[]>, dt: number,
     return;
   }
 
-  const { state, event } = stepShuttle(r.shuttle, dt);
-  r.shuttle = state;
+  let event: ShuttleEvent = { kind: 'none' };
+  for (let n = 0; n <= (hit?.ticks ?? 0) && event.kind === 'none'; n++) {
+    const next = stepShuttle(r.shuttle, dt);
+    r.shuttle = next.state;
+    event = next.event;
+  }
   const hitter = r.lastHitter!;
   if (event.kind === 'net') r.result = { winner: other(hitter), reason: 'net' };
   else if (event.kind === 'floor') r.result = judgeFloor(event.at, hitter, r.stage === 'serveFlight', r.court, r.doubles);

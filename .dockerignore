@@ -1,0 +1,13 @@
+node_modules
+dist
+dist-server
+.git
+.claude
+.coord
+.orchestra
+.env
+.env.*
+docs
+public
+supabase
+*.md

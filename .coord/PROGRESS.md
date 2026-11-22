@@ -2,9 +2,9 @@
 
 ## In progress
 <!-- - [agent] task — files owned — started YYYY-MM-DD -->
-- [agy] Phase 4 K2b follow-up: pure applyCareerResult + tests, progress label — src/game/**, src/ui/labels.ts — started 2026-11-22
 
 ## Done
+- [all] Phase 4 career and progression complete: K1 career core (sonnet), K2 + K2b pages, flow and tests (agy), S1 serve fix (opencode); every branch cross-reviewed — main 2026-11-22
 - [opencode] S1 serve contact at or below 1.15 m at any assist (BWF 9.1.6) — launch contact capped in sim/makeHit, non-serve hits unchanged — agent/opencode cde1e29 — 2026-11-22
 - [agy] Phase 4 K2 career pages, bracket view, match wiring, points on the result screen, reviewed by Sonnet — main merge after 14f7333 — 2026-11-22
 - [sonnet] Phase 4 K1 career core (tiers, points, brackets, simulation, parseCareer, FORMAT_1X15, awardPoints), reviewed by agy — main merge after 69e1976 — 2026-11-22

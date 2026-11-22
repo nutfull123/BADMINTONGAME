@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { SaveData, Stats } from '../types';
+import { createTournament } from '../career';
 import {
-  activeCharacter, characterBudget, createCharacter, deleteCharacter, setActiveCharacter, statsError, updateCharacter,
+  activeCharacter, awardPoints, setCareer, characterBudget, createCharacter, deleteCharacter, setActiveCharacter, statsError, updateCharacter,
 } from './characters';
 import { SAVE_KEY, emptySave, loadSave, writeSave, type StorageLike } from './save';
 import { DEFAULT_GAME_SETTINGS, rebindKey, toMatchSettings } from './settings';
@@ -163,5 +164,54 @@ describe('ui helpers in app', () => {
     expect(out.conflict).toBe('backhand');
     expect(DEFAULT_GAME_SETTINGS.controls.keys.jump).toEqual(['Space']);
     expect(rebindKey(DEFAULT_GAME_SETTINGS.controls.keys, 'jump', 'KeyJ').conflict).toBeNull();
+  });
+});
+
+describe('career in the save', () => {
+  const withCareer = () => {
+    const save = createCharacter(emptySave(), 'Nut', stats({ gender: 'male' }));
+    const c = save.characters[0]!;
+    const career = { unlocked: 1, best: {}, current: createTournament('club', 'MS', c, 5) };
+    return { save: setCareer(save, c.id, career), career, id: c.id };
+  };
+
+  it('round-trips a real career', () => {
+    const { save, career } = withCareer();
+    const store = memory();
+    writeSave(save, store);
+    expect(loadSave(store).characters[0]!.career).toEqual(career);
+  });
+
+  it('drops a tampered career but keeps the character', () => {
+    const { save } = withCareer();
+    const raw = JSON.parse(JSON.stringify(save));
+    raw.characters[0].career.current.entrants.pop();
+    const loaded = loadSave(memory({ [SAVE_KEY]: JSON.stringify(raw) }));
+    expect(loaded.characters).toHaveLength(1);
+    expect(loaded.characters[0]!.name).toBe('Nut');
+    expect('career' in loaded.characters[0]!).toBe(false);
+  });
+
+  it('awardPoints adds, caps at 20, ignores bad numbers and unknown ids, and never mutates', () => {
+    const { save, id } = withCareer();
+    const before = JSON.stringify(save);
+    const a = awardPoints(save, id, 0.75);
+    expect(a.characters[0]!.earnedPoints).toBe(0.75);
+    expect(awardPoints(a, id, 0.25).characters[0]!.earnedPoints).toBe(1);
+    expect(awardPoints(save, id, 99).characters[0]!.earnedPoints).toBe(20);
+    expect(awardPoints(awardPoints(save, id, 19.5), id, 3).characters[0]!.earnedPoints).toBe(20);
+    for (const bad of [NaN, Infinity, -1, 0]) expect(awardPoints(save, id, bad).characters[0]!.earnedPoints).toBe(0);
+    expect(awardPoints(save, 'nope', 5)).toEqual(save);
+    expect(JSON.stringify(save)).toBe(before);
+  });
+
+  it('setCareer returns a new save and leaves other characters alone', () => {
+    let save = createCharacter(emptySave(), 'A', stats());
+    save = createCharacter(save, 'B', stats());
+    const [a, b] = save.characters;
+    const next = setCareer(save, a!.id, { unlocked: 2, best: { club: 1 }, current: null });
+    expect(next.characters[0]!.career).toEqual({ unlocked: 2, best: { club: 1 }, current: null });
+    expect(next.characters[1]).toBe(b);
+    expect(save.characters[0]!.career).toBeUndefined();
   });
 });

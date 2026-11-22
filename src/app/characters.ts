@@ -1,5 +1,5 @@
 // Character management on a SaveData. Pure: every function returns a new SaveData.
-import type { Character, SaveData, Stats } from '../types';
+import type { CareerProgress, Character, SaveData, Stats } from '../types';
 import { validateStats } from '../sim';
 import { STAT_BUDGET, STAT_MAX } from '../sim/tuning';
 
@@ -53,3 +53,17 @@ export function setActiveCharacter(save: SaveData, id: string): SaveData {
 
 export const activeCharacter = (save: SaveData): Character | null =>
   save.characters.find((c) => c.id === save.activeCharacterId) ?? null;
+
+// Earned stat points from offline play, capped at 20 (40 in total). Bad numbers and unknown ids change nothing.
+export function awardPoints(save: SaveData, characterId: string, points: number): SaveData {
+  if (!Number.isFinite(points) || points <= 0) return save;
+  return {
+    ...save,
+    characters: save.characters.map((c) =>
+      c.id === characterId ? { ...c, earnedPoints: Math.min(MAX_EARNED, c.earnedPoints + points) } : c),
+  };
+}
+
+export function setCareer(save: SaveData, characterId: string, career: CareerProgress): SaveData {
+  return { ...save, characters: save.characters.map((c) => (c.id === characterId ? { ...c, career } : c)) };
+}

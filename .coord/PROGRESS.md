@@ -34,7 +34,6 @@
 - tutorial: digit keys 1-8 to replay any drill; end message counts skipped drills as passed
 - serve stage accepts any shot type; require serveShort/serveLong (src/game/rally.ts:75)
 - move BOT_TUNING / SERVE_AIM_FLICK into sim/tuning.ts; ui should import STAT_BUDGET
-- serve contact can exceed 1.15 m at high assist (sim)
 - quit a match mid-game; code-split the 588 kB bundle
 - tutorial loop duplicates match loop (shared loop helper)
 - chasse pose moves both legs equally: needs lead/trail foot so it reads as a side slide (render/pose.ts)

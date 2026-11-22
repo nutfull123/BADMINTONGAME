@@ -39,16 +39,8 @@ function validCharacter(c: unknown): c is Character {
   return statsError(stats, characterBudget({ earnedPoints: c.earnedPoints })) === null;
 }
 
-export function loadSave(storage: StorageLike | null = browserStorage()): SaveData {
-  if (!storage) return emptySave();
-  let raw: unknown;
-  try {
-    const text = storage.getItem(SAVE_KEY);
-    if (!text) return emptySave();
-    raw = JSON.parse(text);
-  } catch {
-    return emptySave();
-  }
+// Validates untrusted data from localStorage or the cloud; never throws, falls back to an empty save.
+export function parseSave(raw: unknown): SaveData {
   if (!isObject(raw) || raw.version !== 1) return emptySave();
   const seen = new Set<string>();
   const characters = (Array.isArray(raw.characters) ? raw.characters : [])
@@ -64,6 +56,17 @@ export function loadSave(storage: StorageLike | null = browserStorage()): SaveDa
     ? (raw.activeCharacterId as string)
     : characters[0]?.id ?? null;
   return { version: 1, characters, activeCharacterId: active, settings: sanitizeSettings(raw.settings) };
+}
+
+export function loadSave(storage: StorageLike | null = browserStorage()): SaveData {
+  if (!storage) return emptySave();
+  try {
+    const text = storage.getItem(SAVE_KEY);
+    if (!text) return emptySave();
+    return parseSave(JSON.parse(text));
+  } catch {
+    return emptySave();
+  }
 }
 
 // Returns false when the save could not be written (no storage, full, blocked), so the UI can say so.

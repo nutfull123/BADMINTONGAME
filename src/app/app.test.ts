@@ -4,7 +4,7 @@ import { createTournament } from '../career';
 import {
   activeCharacter, awardPoints, setCareer, characterBudget, createCharacter, deleteCharacter, setActiveCharacter, statsError, updateCharacter,
 } from './characters';
-import { SAVE_KEY, emptySave, loadSave, writeSave, type StorageLike } from './save';
+import { SAVE_KEY, emptySave, loadSave, parseSave, writeSave, type StorageLike } from './save';
 import { DEFAULT_GAME_SETTINGS, rebindKey, toMatchSettings } from './settings';
 
 const memory = (init: Record<string, string> = {}): StorageLike & { data: Record<string, string> } => {
@@ -89,6 +89,16 @@ describe('settings', () => {
     expect(toMatchSettings(DEFAULT_GAME_SETTINGS)).toEqual({
       hitAssist: 70, landingMarker: true, timingRing: true, format: '3x15', botLevel: 'medium', mode: 'easy', event: 'MS',
     });
+  });
+});
+
+describe('parseSave', () => {
+  it('is what loadSave uses: same result, and junk gives an empty save', () => {
+    const save = createCharacter(emptySave(), 'Nut', stats());
+    expect(parseSave(JSON.parse(JSON.stringify(save)))).toEqual(save);
+    expect(parseSave(null)).toEqual(emptySave());
+    expect(parseSave({ version: 2 })).toEqual(emptySave());
+    expect(parseSave([])).toEqual(emptySave());
   });
 });
 

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { GraphicsQuality } from '../types';
 import { COURT } from '../physics';
@@ -23,6 +24,53 @@ export const AD_BRANDS = ['BADMINTON 3D', 'SHUTTLE CUP', 'SMASH ARENA', 'NET KIN
 
 export const HALL_FLOOR_COLOR = 0x5c4732;
 export const COURT_MAT_COLOR = 0x1f7a4f;
+
+export const ARENA_ASSETS = {
+  hdri: '/assets/hdri/gym_01_1k.hdr',
+  woodDiff: '/assets/textures/wooden_floor_01_diff_1k.jpg',
+  woodNor: '/assets/textures/wooden_floor_01_nor_gl_1k.jpg',
+  woodRough: '/assets/textures/wooden_floor_01_rough_1k.jpg',
+  matNor: '/assets/textures/linoleum_brown_nor_gl_1k.jpg',
+  matRough: '/assets/textures/linoleum_brown_rough_1k.jpg',
+} as const;
+
+/**
+ * Returns texture anisotropy for a graphics quality preset, capped at 8 on high, 4 on medium, 1 on low.
+ */
+export function anisotropyForQuality(q: GraphicsQuality, maxAnisotropy: number): number {
+  const hw = Number.isFinite(maxAnisotropy) && maxAnisotropy >= 1 ? Math.floor(maxAnisotropy) : 1;
+  if (q === 'low') return 1;
+  return Math.min(hw, q === 'medium' ? 4 : 8);
+}
+
+/**
+ * Computes UV repeat counts so a texture covering `tileMeters` (default 2 m) tiles at real scale.
+ */
+export function computeSurfaceRepeat(widthMeters: number, lengthMeters: number, tileMeters = 2): { x: number; y: number } {
+  const safeTile = tileMeters > 0 ? tileMeters : 2;
+  return {
+    x: widthMeters / safeTile,
+    y: lengthMeters / safeTile,
+  };
+}
+
+/**
+ * Configures tiling, colour space and anisotropy on a texture without setting `needsUpdate = true`
+ * (TextureLoader marks `needsUpdate` itself once the image data actually arrives).
+ */
+export function configureTiledTexture(
+  tex: THREE.Texture,
+  repeat: { x: number; y: number },
+  isColor: boolean,
+  anisotropy: number,
+): THREE.Texture {
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(repeat.x, repeat.y);
+  tex.colorSpace = isColor ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  tex.anisotropy = anisotropy;
+  return tex;
+}
 
 export type StandSide = 'west' | 'east' | 'far';
 
@@ -408,16 +456,29 @@ function createSeatedBodyGeometry(): THREE.BufferGeometry {
 export function createArena(scene: THREE.Scene, renderer: THREE.WebGLRenderer): Arena {
   scene.background = new THREE.Color(0x0b111e);
 
+  const floorW = HALL_DIMENSIONS.halfWidth * 2;
+  const floorL = HALL_DIMENSIONS.halfLength * 2;
+  const matW = COURT.halfWidthDoubles * 2 + 1.8;
+  const matL = COURT.halfLength * 2 + 1.8;
+
   // 1. Warm wooden hall floor around the court (y = -0.01) & green court mat (y = 0)
+  // Tinted by HALL_FLOOR_COLOR so the outer wood floor stays darker and less saturated than the court mat
+  const floorMat = new THREE.MeshStandardMaterial({ color: HALL_FLOOR_COLOR, roughness: 0.78, metalness: 0.04 });
   const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(HALL_DIMENSIONS.halfWidth * 2, HALL_DIMENSIONS.halfLength * 2).rotateX(-Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: HALL_FLOOR_COLOR, roughness: 0.74, metalness: 0.04 }),
+    new THREE.PlaneGeometry(floorW, floorL).rotateX(-Math.PI / 2),
+    floorMat,
   );
   floor.position.y = -0.01;
 
+  const courtMatMaterial = new THREE.MeshStandardMaterial({
+    color: COURT_MAT_COLOR,
+    roughness: 0.65,
+    metalness: 0.02,
+    normalScale: new THREE.Vector2(0.45, 0.45),
+  });
   const courtMat = new THREE.Mesh(
-    new THREE.PlaneGeometry(COURT.halfWidthDoubles * 2 + 1.8, COURT.halfLength * 2 + 1.8).rotateX(-Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: COURT_MAT_COLOR, roughness: 0.62, metalness: 0.02 }),
+    new THREE.PlaneGeometry(matW, matL).rotateX(-Math.PI / 2),
+    courtMatMaterial,
   );
   courtMat.position.y = 0;
 
@@ -444,15 +505,17 @@ export function createArena(scene: THREE.Scene, renderer: THREE.WebGLRenderer): 
   const fillLight = new THREE.DirectionalLight(0xe0f2fe, 0.45);
   fillLight.position.set(-4.5, 11.5, -6.5);
 
-  // Environment map from Three's RoomEnvironment via PMREMGenerator
+  // Environment map: RoomEnvironment fallback immediately, replaced by /assets/hdri/gym_01_1k.hdr once loaded
   let pmremGenerator: THREE.PMREMGenerator | null = null;
-  let envRenderTarget: THREE.WebGLRenderTarget | null = null;
+  let roomEnvRenderTarget: THREE.WebGLRenderTarget | null = null;
+  let hdriRenderTarget: THREE.WebGLRenderTarget | null = null;
   let envTexture: THREE.Texture | null = null;
   try {
     pmremGenerator = new THREE.PMREMGenerator(renderer);
+    pmremGenerator.compileEquirectangularShader();
     const roomEnv = new RoomEnvironment();
-    envRenderTarget = pmremGenerator.fromScene(roomEnv, 0.04);
-    envTexture = envRenderTarget.texture;
+    roomEnvRenderTarget = pmremGenerator.fromScene(roomEnv, 0.04);
+    envTexture = roomEnvRenderTarget.texture;
     roomEnv.dispose();
   } catch (err) {
     console.warn('RoomEnvironment PMREM generation failed; falling back to direct lights:', err);
@@ -564,6 +627,166 @@ export function createArena(scene: THREE.Scene, renderer: THREE.WebGLRenderer): 
   let currentQuality: GraphicsQuality = 'high';
   let lastSwayUpdate = -1;
   const SWAY_INTERVAL = 0.22; // < 5 matrix updates per second (4.54 Hz)
+  let disposed = false;
+
+  // Lazy-loaded PBR surface textures & HDRI (only loaded on medium / high quality).
+  // Each texture is assigned to its material ONLY inside its load callback once image data has arrived,
+  // so an unloaded or failed file never sits on a material without image data.
+  interface LoadedSurfaceTextures {
+    woodDiff: THREE.Texture | null;
+    woodNor: THREE.Texture | null;
+    woodRough: THREE.Texture | null;
+    matNor: THREE.Texture | null;
+    matRough: THREE.Texture | null;
+    all: THREE.Texture[];
+  }
+  let surfaceTextures: LoadedSurfaceTextures | null = null;
+  let hdriLoadStarted = false;
+
+  function maxHwAnisotropy(): number {
+    try {
+      return renderer.capabilities?.getMaxAnisotropy?.() ?? 1;
+    } catch {
+      return 1;
+    }
+  }
+
+  function syncLoadedMapsToMaterials(): void {
+    if (currentQuality === 'low' || !surfaceTextures) {
+      if (floorMat.map || floorMat.normalMap || floorMat.roughnessMap) {
+        floorMat.map = null;
+        floorMat.normalMap = null;
+        floorMat.roughnessMap = null;
+        floorMat.needsUpdate = true;
+      }
+      if (courtMatMaterial.normalMap || courtMatMaterial.roughnessMap) {
+        courtMatMaterial.normalMap = null;
+        courtMatMaterial.roughnessMap = null;
+        courtMatMaterial.needsUpdate = true;
+      }
+      return;
+    }
+
+    if (
+      floorMat.map !== surfaceTextures.woodDiff ||
+      floorMat.normalMap !== surfaceTextures.woodNor ||
+      floorMat.roughnessMap !== surfaceTextures.woodRough
+    ) {
+      floorMat.map = surfaceTextures.woodDiff;
+      floorMat.normalMap = surfaceTextures.woodNor;
+      floorMat.roughnessMap = surfaceTextures.woodRough;
+      floorMat.needsUpdate = true;
+    }
+
+    if (
+      courtMatMaterial.normalMap !== surfaceTextures.matNor ||
+      courtMatMaterial.roughnessMap !== surfaceTextures.matRough
+    ) {
+      courtMatMaterial.normalMap = surfaceTextures.matNor;
+      courtMatMaterial.roughnessMap = surfaceTextures.matRough;
+      courtMatMaterial.needsUpdate = true;
+    }
+  }
+
+  function ensureHighOrMediumAssets(q: GraphicsQuality): void {
+    const aniso = anisotropyForQuality(q, maxHwAnisotropy());
+
+    if (!surfaceTextures) {
+      const store: LoadedSurfaceTextures = {
+        woodDiff: null,
+        woodNor: null,
+        woodRough: null,
+        matNor: null,
+        matRough: null,
+        all: [],
+      };
+      surfaceTextures = store;
+
+      const loader = new THREE.TextureLoader();
+      const floorRep = computeSurfaceRepeat(floorW, floorL, 2);
+      const matRep = computeSurfaceRepeat(matW, matL, 2);
+
+      const loadMap = (
+        url: string,
+        rep: { x: number; y: number },
+        isColor: boolean,
+        slot: 'woodDiff' | 'woodNor' | 'woodRough' | 'matNor' | 'matRough',
+      ): void => {
+        const tex = loader.load(
+          url,
+          (loaded) => {
+            if (disposed) {
+              loaded.dispose();
+              return;
+            }
+            configureTiledTexture(
+              loaded,
+              rep,
+              isColor,
+              anisotropyForQuality(currentQuality, maxHwAnisotropy()),
+            );
+            store[slot] = loaded;
+            syncLoadedMapsToMaterials();
+          },
+          undefined,
+          (err) => {
+            console.warn(`Failed to load arena texture ${url}:`, err);
+          },
+        );
+        configureTiledTexture(tex, rep, isColor, aniso);
+        store.all.push(tex);
+      };
+
+      loadMap(ARENA_ASSETS.woodDiff, floorRep, true, 'woodDiff');
+      loadMap(ARENA_ASSETS.woodNor, floorRep, false, 'woodNor');
+      loadMap(ARENA_ASSETS.woodRough, floorRep, false, 'woodRough');
+      loadMap(ARENA_ASSETS.matNor, matRep, false, 'matNor');
+      loadMap(ARENA_ASSETS.matRough, matRep, false, 'matRough');
+    } else {
+      for (const tex of surfaceTextures.all) {
+        tex.anisotropy = aniso;
+      }
+    }
+
+    if (!hdriLoadStarted && pmremGenerator) {
+      hdriLoadStarted = true;
+      const hdrLoader = new HDRLoader();
+      hdrLoader.load(
+        ARENA_ASSETS.hdri,
+        (hdrTex) => {
+          if (disposed || !pmremGenerator) {
+            hdrTex.dispose();
+            return;
+          }
+          try {
+            const target = pmremGenerator.fromEquirectangular(hdrTex);
+            hdrTex.dispose();
+            hdriRenderTarget?.dispose();
+            hdriRenderTarget = target;
+            envTexture = target.texture;
+            if (currentQuality !== 'low') {
+              scene.environment = envTexture;
+              scene.environmentIntensity = 0.5;
+            }
+          } catch (err) {
+            hdrTex.dispose();
+            console.warn('HDRI PMREM generation failed; keeping RoomEnvironment fallback:', err);
+          }
+        },
+        undefined,
+        (err) => {
+          console.warn(`Failed to load HDRI ${ARENA_ASSETS.hdri}; keeping RoomEnvironment fallback:`, err);
+        },
+      );
+    }
+  }
+
+  function applySurfaceMaterials(q: GraphicsQuality): void {
+    if (q !== 'low') {
+      ensureHighOrMediumAssets(q);
+    }
+    syncLoadedMapsToMaterials();
+  }
 
   function setQuality(q: GraphicsQuality): void {
     currentQuality = q;
@@ -573,6 +796,8 @@ export function createArena(scene: THREE.Scene, renderer: THREE.WebGLRenderer): 
     spectatorBodies.visible = count > 0;
     spectatorHeads.visible = count > 0;
 
+    applySurfaceMaterials(q);
+
     if (q === 'low' || !envTexture) {
       scene.environment = null;
       // Raise hemisphere & directional lights when environment map is off so brightness stays balanced
@@ -581,7 +806,7 @@ export function createArena(scene: THREE.Scene, renderer: THREE.WebGLRenderer): 
       fillLight.intensity = 0.55;
     } else {
       scene.environment = envTexture;
-      scene.environmentIntensity = 0.45;
+      scene.environmentIntensity = 0.5;
       hemiLight.intensity = 0.95;
       keyLight.intensity = 0.9;
       fillLight.intensity = 0.45;
@@ -601,11 +826,17 @@ export function createArena(scene: THREE.Scene, renderer: THREE.WebGLRenderer): 
   }
 
   function dispose(): void {
+    disposed = true;
     if (scene.environment === envTexture) {
       scene.environment = null;
     }
+    if (surfaceTextures) {
+      for (const tex of surfaceTextures.all) tex.dispose();
+      surfaceTextures = null;
+    }
     adAtlas?.dispose();
-    envRenderTarget?.dispose();
+    hdriRenderTarget?.dispose();
+    roomEnvRenderTarget?.dispose();
     pmremGenerator?.dispose();
     standsMesh.dispose();
     spectatorBodies.dispose();

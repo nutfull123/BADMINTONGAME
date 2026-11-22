@@ -29,6 +29,20 @@ describe('buildTeams', () => {
     expect(t.far[0]).toEqual({ ...PRESETS.short, gender: 'female' });
     expect(buildTeams('MS', human('male'), () => 0).far[0].body).toBe('tall');
   });
+  it('uses given partner and opponents stats when provided for career tournament matches', () => {
+    const h = human('male');
+    const partner: Stats = { gender: 'female', body: 'short', speed: 9, power: 6, recovery: 8, stamina: 7 };
+    const oppA: Stats = { gender: 'male', body: 'tall', speed: 7, power: 9, recovery: 6, stamina: 8 };
+    const oppB: Stats = { gender: 'female', body: 'balanced', speed: 8, power: 7, recovery: 8, stamina: 7 };
+
+    const xd = buildTeams('XD', h, () => 0, { partner, opponents: [oppA, oppB] });
+    expect(xd.near).toEqual([h, partner]);
+    expect(xd.far).toEqual([oppA, oppB]);
+
+    const ms = buildTeams('MS', h, () => 0, { opponents: [oppA] });
+    expect(ms.near).toEqual([h]);
+    expect(ms.far).toEqual([oppA]);
+  });
   it('isDoubles', () => {
     expect(['MS', 'WS'].some((e) => isDoubles(e as MatchEvent))).toBe(false);
     expect(['MD', 'WD', 'XD'].every((e) => isDoubles(e as MatchEvent))).toBe(true);

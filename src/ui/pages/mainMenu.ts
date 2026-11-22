@@ -8,6 +8,7 @@ import { mountOverlay } from '../overlay';
 export interface MainMenuActions {
   onPlayMatch: () => void;
   onTutorial: () => void;
+  onTournament?: () => void;
   onCharacters: () => void;
   onSettings: () => void;
 }
@@ -85,8 +86,12 @@ export function showMainMenu(root: HTMLElement, save: SaveData, actions: MainMen
   const tourBtn = document.createElement('button');
   tourBtn.type = 'button';
   tourBtn.className = 'bm-btn';
-  tourBtn.disabled = true;
-  tourBtn.innerHTML = '<span>ทัวร์นาเมนต์</span><span class="bm-soon-pill">เร็วๆ นี้</span>';
+  tourBtn.dataset.testid = 'menu-tournament';
+  tourBtn.textContent = 'ทัวร์นาเมนต์ (ออฟไลน์)';
+  tourBtn.addEventListener('click', () => {
+    overlay.remove();
+    actions.onTournament?.();
+  });
 
   const charsBtn = document.createElement('button');
   charsBtn.type = 'button';

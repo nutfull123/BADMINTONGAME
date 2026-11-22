@@ -4,16 +4,22 @@ import {
   ACTION_LABELS,
   CAMERA_PRESET_LABELS,
   GRAPHICS_QUALITY_LABELS,
+  ROUND_LABELS,
+  TIER_LABELS,
   formatKeyCode,
   formatBindingList,
   formatConflictMessage,
   formatCharacterSummary,
   formatControlHints,
+  formatEarnedPointsSummary,
+  formatMatchScoreForCareer,
   formatMovementHint,
+  formatPlayerSideScore,
+  formatRoundReachedLabel,
   matchesBinding,
 } from './labels';
 import { DEFAULT_KEYS, rebindKey } from '../app/settings';
-import type { Character } from '../types';
+import type { Character, GameScore } from '../types';
 
 describe('UI shell pure helpers (labels, key formatting, conflict warning, character summary)', () => {
   it('defines Thai labels for all 15 InputActions in ACTION_ORDER', () => {
@@ -94,5 +100,50 @@ describe('UI shell pure helpers (labels, key formatting, conflict warning, chara
     const allRebound = rebindKey(rebindKey(DEFAULT_KEYS, 'jump', 'KeyJ').keys, 'dive', 'KeyV').keys;
     expect(formatControlHints(allRebound)).toContain('J ค้าง = กระโดด');
     expect(formatControlHints(allRebound)).toContain('V = พุ่งรับ');
+  });
+
+  it('defines Thai + English labels for all four career tiers and five round names', () => {
+    expect(TIER_LABELS.club).toContain('Club Open');
+    expect(TIER_LABELS.regional).toContain('Regional Cup');
+    expect(TIER_LABELS.national).toContain('National Championship');
+    expect(TIER_LABELS.masters).toContain('Grand Masters');
+    expect(ROUND_LABELS.R32).toContain('32');
+    expect(ROUND_LABELS.R16).toContain('16');
+    expect(ROUND_LABELS.QF).toContain('QF');
+    expect(ROUND_LABELS.SF).toContain('SF');
+    expect(ROUND_LABELS.F).toContain('Final');
+  });
+
+  it('formats earned points out of 20 and progress toward the next whole stat point', () => {
+    const zero = formatEarnedPointsSummary(0);
+    expect(zero.whole).toBe(0);
+    expect(zero.progressPct).toBe(0);
+    expect(zero.text).toContain('0 / 20');
+
+    const partial = formatEarnedPointsSummary(2.75);
+    expect(partial.whole).toBe(2);
+    expect(partial.progressPct).toBe(75);
+    expect(partial.text).toContain('2.75 / 20');
+    expect(partial.progressText).toContain('75%');
+
+    const capped = formatEarnedPointsSummary(20);
+    expect(capped.whole).toBe(20);
+    expect(capped.progressPct).toBe(100);
+    expect(capped.progressText).toContain('เต็มแล้ว');
+  });
+
+  it('formats best round reached per tier and flips bracket scores when the player is entrant b', () => {
+    expect(formatRoundReachedLabel(undefined, 8)).toContain('ยังไม่เคยลงแข่ง');
+    expect(formatRoundReachedLabel(0, 8)).toContain('QF');
+    expect(formatRoundReachedLabel(1, 8)).toContain('SF');
+    expect(formatRoundReachedLabel(2, 8)).toContain('Final');
+    expect(formatRoundReachedLabel(3, 8)).toContain('แชมป์');
+
+    expect(formatPlayerSideScore('15-11', true)).toBe('15-11');
+    expect(formatPlayerSideScore('11-15', false)).toBe('15-11');
+    expect(formatPlayerSideScore('13-15 15-9 12-15', false)).toBe('15-13 9-15 15-12');
+
+    const games: GameScore[] = [{ near: 15, far: 11 }, { near: 12, far: 15 }, { near: 15, far: 9 }];
+    expect(formatMatchScoreForCareer(games)).toBe('15-11 12-15 15-9');
   });
 });

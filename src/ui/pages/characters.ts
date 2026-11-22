@@ -8,7 +8,7 @@ import {
 } from '../../app/characters';
 import { heightOf } from '../../sim/tuning';
 import type { BodyType, Character, Gender, SaveData, Stats } from '../../types';
-import { BODY_LABELS, GENDER_LABELS, formatCharacterSummary } from '../labels';
+import { BODY_LABELS, GENDER_LABELS, formatCharacterSummary, formatEarnedPointsSummary } from '../labels';
 import { STAT_BUDGET, PRESETS, budgetLeft, clampStatToBudget, type StatKey } from '../model';
 import { createStorageNotice, mountOverlay } from '../overlay';
 
@@ -93,7 +93,13 @@ export function showCharacters(
         statsLine.style.fontSize = '13px';
         statsLine.style.color = '#94a3b8';
         statsLine.textContent = `ความเร็ว ${c.stats.speed} · พลังตบ ${c.stats.power} · ฟื้นตัว ${c.stats.recovery} · ความอึด ${c.stats.stamina}`;
-        info.append(nameLine, statsLine);
+        const earnedInfo = formatEarnedPointsSummary(c.earnedPoints);
+        const earnedLine = document.createElement('div');
+        earnedLine.style.fontSize = '12px';
+        earnedLine.style.color = '#38bdf8';
+        earnedLine.style.marginTop = '2px';
+        earnedLine.textContent = `${earnedInfo.text} · ${earnedInfo.progressText}`;
+        info.append(nameLine, statsLine, earnedLine);
 
         const actionsRow = document.createElement('div');
         actionsRow.className = 'bm-btn-row';
@@ -191,7 +197,7 @@ export function showCharacters(
 
   function renderCharacterForm(existing: Character | null): void {
     const isNew = existing === null;
-    const budget = existing ? characterBudget(existing) : STAT_BUDGET;
+    const budget = Math.floor(existing ? characterBudget(existing) : STAT_BUDGET);
     let draftName = existing ? existing.name : 'Player 1';
     let draftStats: Stats = existing ? { ...existing.stats } : { ...PRESETS.balanced };
 
@@ -281,6 +287,29 @@ export function showCharacters(
     budgetBadge.className = 'bm-budget-badge';
     budgetBadge.dataset.testid = 'points-left';
     budgetHeader.append(budgetTitle, budgetBadge);
+
+    // Earned points & progress to next point
+    const earnedSummary = formatEarnedPointsSummary(existing ? existing.earnedPoints : 0);
+    const progressRow = document.createElement('div');
+    progressRow.className = 'bm-progress-row';
+    progressRow.dataset.testid = 'earned-points-summary';
+    const progressTop = document.createElement('div');
+    progressTop.className = 'bm-progress-top';
+    const earnedLeftEl = document.createElement('span');
+    earnedLeftEl.style.color = '#38bdf8';
+    earnedLeftEl.textContent = earnedSummary.text;
+    const earnedRightEl = document.createElement('span');
+    earnedRightEl.textContent = earnedSummary.progressText;
+    progressTop.append(earnedLeftEl, earnedRightEl);
+    const progressTrack = document.createElement('div');
+    progressTrack.className = 'bm-bar-track';
+    progressTrack.style.height = '8px';
+    const progressFill = document.createElement('div');
+    progressFill.className = 'bm-bar-fill';
+    progressFill.style.width = `${earnedSummary.progressPct}%`;
+    progressFill.style.background = '#38bdf8';
+    progressTrack.appendChild(progressFill);
+    progressRow.append(progressTop, progressTrack);
 
     // 4 stat sliders
     const slidersGrid = document.createElement('div');
@@ -407,6 +436,7 @@ export function showCharacters(
       bodyHeader,
       bodyRow,
       budgetHeader,
+      progressRow,
       slidersGrid,
       errBox,
       footer,

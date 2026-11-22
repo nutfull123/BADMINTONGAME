@@ -249,3 +249,23 @@ Claude's calls (from `.coord/research/accounts-supabase.md`):
 - Environment: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env.local` (git-ignored); both
   missing means guest-only, exactly as today.
 - Sign-up needs an unchecked PDPA consent box linking the privacy policy (Thai first, English after).
+
+## Phase 6 detail (design check 2026-11-22)
+
+User's answers: the Fly.io game server sleeps when nobody plays (about $0-1 a month while testing; a
+machine with open sockets keeps running); the web client goes on Cloudflare Pages (free); free
+subdomains for now (*.pages.dev and *.fly.dev); packages `ws` 8.23.0 and `@types/ws`. The user creates
+the Fly.io (card required) and Cloudflare accounts.
+
+Claude's calls (from `.coord/research/online-rooms.md`):
+- Plain `ws` on Node, server code in `server/` importing the same pure modules (rules, physics, sim,
+  game/rally); built with Vite's own SSR build, so no extra bundler. Protocol: `src/net/protocol.ts`.
+- Server-authoritative at 120 Hz (the offline STEP), snapshots at 30 Hz; the client predicts its own
+  movement and replays unacknowledged inputs, interpolates the others; racket-shuttle contact is judged
+  against the shuttle the player saw (rewind of at most ~115 ms).
+- Players are identified by their Supabase access token, checked by the server with supabase-js;
+  online play needs an account, offline play does not.
+- Rooms: a 6-character code; the host picks the event, format, assists for everyone and "real points"
+  or "everyone at 20"; empty seats are bots; a disconnected player's seat is played by a bot until they
+  rejoin with their resume token (30 s window) or the match ends. Slow motion stays offline only.
+- Far-side players see the court mirrored so they always play from the near end.

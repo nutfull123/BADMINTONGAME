@@ -2,13 +2,13 @@
 
 ## In progress
 <!-- - [agent] task — files owned — started YYYY-MM-DD -->
-- [sonnet] Phase 6 S2 online serve timeout — server/match.ts, server/match.test.ts — started 2026-11-23
 - [agy] Phase 6 N3 online lobby pages, room page, HUD names, menu wiring — src/ui/**, src/game/index.ts — started 2026-11-22
 
 ## Waiting on the user
 - Phase 5 test with a real Supabase project: create it, run supabase/migrations/0001_user_saves.sql, providers and URLs per docs/supabase-setup.md, fill .env.local; then claude tests sign-up, Google, sync and delete
 
 ## Done
+- [sonnet] Phase 6 S2 online serve timeout (15 s, then the seat bot serves), reviewed by agy with a red-first check — main merge after a77f00b — 2026-11-23
 - [sonnet] Phase 6 N1 game server (protocol validation, auth, rooms, 120 Hz loop, lag compensation, Docker/fly.toml, deploy guide), reviewed by agy — main merge after 59ebd68 — 2026-11-23
 - [sonnet] Phase 6 N2 online client core (connection, clock, prediction, interpolation, mirror, startOnlineMatch), reviewed by agy — main merge after 5220112 — 2026-11-22
 - [agy] Phase 5 A2 account pages, privacy policy, Account tab, sign-in sync (Argon then Neon), 2 review rounds by Sonnet — main merge after f920dc0 — 2026-11-22
@@ -34,7 +34,6 @@
 - [claude] Lead session moved: old chat 31c33d33 (started in ~) continues in the BADMINTONGAME project session — 2026-11-20
 
 ## Follow-ups (from final review, not blocking)
-- Phase 6: no serve timeout online (a human who never serves stalls the rally; a bot should serve after ~20 s)
 - Phase 6: no rematch in a finished room (players leave and create a new room)
 - Phase 6: Dockerfile and fly.toml not run yet (first real deploy will test them)
 - Phase 2: "Click to play" pause message covers the human player; overlays lack role=dialog / live regions

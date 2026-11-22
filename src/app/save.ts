@@ -39,11 +39,18 @@ function validCharacter(c: unknown): c is Character {
   return statsError(stats, characterBudget({ earnedPoints: c.earnedPoints })) === null;
 }
 
+export interface SaveReport {
+  save: SaveData;
+  valid: boolean;   // an object with version 1 and a characters array; false = nothing trustworthy was read
+  dropped: number;  // characters removed as invalid or duplicate
+}
+
 // Validates untrusted data from localStorage or the cloud; never throws, falls back to an empty save.
-export function parseSave(raw: unknown): SaveData {
-  if (!isObject(raw) || raw.version !== 1) return emptySave();
+export function parseSaveReport(raw: unknown): SaveReport {
+  if (!isObject(raw) || raw.version !== 1) return { save: emptySave(), valid: false, dropped: 0 };
+  const list = Array.isArray(raw.characters) ? raw.characters : [];
   const seen = new Set<string>();
-  const characters = (Array.isArray(raw.characters) ? raw.characters : [])
+  const characters = list
     .filter(validCharacter)
     .filter((c) => !seen.has(c.id) && Boolean(seen.add(c.id)))
     .map((c): Character => {
@@ -55,8 +62,14 @@ export function parseSave(raw: unknown): SaveData {
   const active = characters.some((c) => c.id === raw.activeCharacterId)
     ? (raw.activeCharacterId as string)
     : characters[0]?.id ?? null;
-  return { version: 1, characters, activeCharacterId: active, settings: sanitizeSettings(raw.settings) };
+  return {
+    save: { version: 1, characters, activeCharacterId: active, settings: sanitizeSettings(raw.settings) },
+    valid: Array.isArray(raw.characters),
+    dropped: list.length - characters.length,
+  };
 }
+
+export const parseSave = (raw: unknown): SaveData => parseSaveReport(raw).save;
 
 export function loadSave(storage: StorageLike | null = browserStorage()): SaveData {
   if (!storage) return emptySave();

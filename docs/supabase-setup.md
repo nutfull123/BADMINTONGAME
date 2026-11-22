@@ -26,7 +26,8 @@
 1. เข้า https://console.cloud.google.com สร้างโปรเจกต์ (หรือใช้อันเดิม)
 2. **APIs & Services** > **OAuth consent screen** ตั้งค่าชื่อแอปและอีเมลติดต่อ (User type: External)
 3. **APIs & Services** > **Credentials** > **Create credentials** > **OAuth client ID** ชนิด **Web application**
-4. ใน **Authorized redirect URIs** ใส่ `https://<project-ref>.supabase.co/auth/v1/callback` (`<project-ref>` ดูได้จาก Supabase: **Project Settings** > **General** > Reference ID)
+4. ใน **Authorized JavaScript origins** ใส่ `http://localhost:5173`
+   ใน **Authorized redirect URIs** ใส่ `https://<project-ref>.supabase.co/auth/v1/callback` (`<project-ref>` ดูได้จาก Supabase: **Project Settings** > **General** > Reference ID)
 5. กด Create แล้วคัดลอก **Client ID** และ **Client secret**
 6. กลับไป Supabase: **Authentication** > **Providers** > **Google** เปิด Enable วาง Client ID และ Client secret แล้วกด **Save**
 
@@ -53,3 +54,12 @@
 4. รีสตาร์ท `npm run dev`
 
 ห้ามใช้ **service_role key** ในไฟล์ใดเลย (ไม่ใส่ใน `.env.local`, ไม่ commit, ไม่ส่งให้ใคร) และห้าม commit `.env.local` (anon key ปลอดภัยสำหรับเบราว์เซอร์เพราะข้อมูลถูกป้องกันด้วย row level security)
+
+## 7. เช็กลิสต์ทดสอบ
+
+ทำหลังหน้าล็อกอินและหน้าตั้งค่าในเกมพร้อมแล้ว
+
+- [ ] สมัครด้วยอีเมล (อีเมลทดสอบ + รหัสผ่านอย่างน้อย 6 ตัว)
+- [ ] ออกจากระบบ แล้วล็อกอินด้วยอีเมลเดิมได้
+- [ ] ล็อกอินด้วย Google ได้
+- [ ] ลบบัญชีทดสอบจากหน้า Settings แล้วล็อกอินด้วยบัญชีนั้นอีกไม่ได้ (ใน Supabase **Authentication** > **Users** และตาราง `user_saves` ไม่เหลือแถวของบัญชีนั้น)

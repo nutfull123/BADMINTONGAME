@@ -27,6 +27,31 @@ describe('fetchCloudSave', () => {
     expect(warn).toHaveBeenCalledTimes(1);
     expect(await fetchCloudSave('u1', fakeClient({ data: null }).client)).toBeNull();
   });
+  it('a structurally corrupt version-1 row gives null with one warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(await fetchCloudSave('u1', fakeClient({ data: { save_data: { version: 1, characters: 'x' } } }).client)).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+  it('a row whose characters were all dropped gives null with one warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const bad = { id: 'b', name: 'B', stats: { ...stats }, earnedPoints: 'lots', createdAt: 1 };
+    expect(await fetchCloudSave('u1', fakeClient({ data: { save_data: { version: 1, characters: [bad] } } }).client)).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+  it('a row with some bad characters is accepted with the bad ones dropped and one warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const save = createCharacter(emptySave(), 'Nut', { ...stats });
+    const bad = { id: 'b', name: 'B', stats: { ...stats }, earnedPoints: 'lots', createdAt: 1 };
+    const raw = { ...JSON.parse(JSON.stringify(save)), characters: [...save.characters, bad] };
+    const got = await fetchCloudSave('u1', fakeClient({ data: { save_data: raw } }).client);
+    expect(got?.characters.map((c) => c.id)).toEqual([save.characters[0]!.id]);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+  it('an empty but valid cloud save is a real empty save, no warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(await fetchCloudSave('u1', fakeClient({ data: { save_data: emptySave() } }).client)).toEqual(emptySave());
+    expect(warn).not.toHaveBeenCalled();
+  });
   it('a failed request throws instead of looking like "no cloud save"', async () => {
     await expect(fetchCloudSave('u1', fakeClient({ data: null, error: { message: 'Failed to fetch' } }).client)).rejects.toThrow();
   });

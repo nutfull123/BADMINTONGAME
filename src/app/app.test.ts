@@ -4,7 +4,7 @@ import { createTournament } from '../career';
 import {
   activeCharacter, awardPoints, setCareer, characterBudget, createCharacter, deleteCharacter, setActiveCharacter, statsError, updateCharacter,
 } from './characters';
-import { SAVE_KEY, emptySave, loadSave, parseSave, writeSave, type StorageLike } from './save';
+import { SAVE_KEY, emptySave, loadSave, parseSave, parseSaveReport, writeSave, type StorageLike } from './save';
 import { DEFAULT_GAME_SETTINGS, rebindKey, toMatchSettings } from './settings';
 
 const memory = (init: Record<string, string> = {}): StorageLike & { data: Record<string, string> } => {
@@ -99,6 +99,28 @@ describe('parseSave', () => {
     expect(parseSave(null)).toEqual(emptySave());
     expect(parseSave({ version: 2 })).toEqual(emptySave());
     expect(parseSave([])).toEqual(emptySave());
+  });
+});
+
+describe('parseSaveReport', () => {
+  const good = { id: 'ok', name: 'X', stats: stats(), earnedPoints: 0, createdAt: 1 };
+  const bad = { ...good, id: 'bad', earnedPoints: 'lots' };
+  const raw = (characters: unknown, version: unknown = 1) => ({ version, characters, activeCharacterId: null, settings: {} });
+
+  it('valid and nothing dropped for a clean save', () => {
+    const r = parseSaveReport(raw([good]));
+    expect(r).toMatchObject({ valid: true, dropped: 0 });
+    expect(r.save.characters).toHaveLength(1);
+  });
+  it('not valid when not an object, version is not 1 or characters is not an array', () => {
+    for (const x of [null, [], { version: 2, characters: [] }, raw('x'), raw(undefined)]) {
+      expect(parseSaveReport(x)).toMatchObject({ valid: false, dropped: 0, save: emptySave() });
+    }
+  });
+  it('counts dropped characters (invalid and duplicate ids)', () => {
+    const r = parseSaveReport(raw([good, bad, good]));
+    expect(r).toMatchObject({ valid: true, dropped: 2 });
+    expect(r.save.characters.map((c) => c.id)).toEqual(['ok']);
   });
 });
 

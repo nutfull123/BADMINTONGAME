@@ -10,6 +10,7 @@ function stable(v: unknown): string {
   return JSON.stringify(v) ?? 'null';
 }
 
+/** "Same content" compares characters only (key order ignored); settings always come from this browser. */
 export function decideSync(local: SaveData, cloud: SaveData | null): SyncAction {
   const hasLocal = local.characters.length > 0;
   const hasCloud = !!cloud && cloud.characters.length > 0;

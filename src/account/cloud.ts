@@ -1,8 +1,8 @@
 // Cloud save: one user_saves row per user, holding the same SaveData as localStorage.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { SaveData } from '../types';
-import { parseSave } from '../app/save';
-import { describeError, type AccountResult } from './auth';
+import { parseSaveReport } from '../app/save';
+import { NOT_CONFIGURED, describeError, type AccountResult } from './auth';
 import { getSupabase } from './client';
 
 export const MAX_SAVE_BYTES = 256 * 1024;
@@ -17,17 +17,17 @@ export async function fetchCloudSave(userId: string, client: Client | null = get
   const { data, error } = await client.from('user_saves').select('save_data').eq('user_id', userId).maybeSingle();
   if (error) throw new Error(describeError(error));
   if (!data) return null;
-  const raw = (data as { save_data: unknown }).save_data;
-  const save = parseSave(raw);
-  if (!(typeof raw === 'object' && raw !== null && (raw as { version?: unknown }).version === 1)) {
+  const { save, valid, dropped } = parseSaveReport((data as { save_data: unknown }).save_data);
+  if (!valid || (dropped > 0 && save.characters.length === 0)) {
     console.warn('cloud save is invalid, ignoring it');
     return null;
   }
+  if (dropped > 0) console.warn(`cloud save had ${dropped} invalid character(s), dropped them`);
   return save;
 }
 
 export async function pushCloudSave(userId: string, save: SaveData, client: Client | null = getSupabase()): Promise<AccountResult> {
-  if (!client) return { ok: false, message: 'ยังไม่ได้ตั้งค่าบัญชีออนไลน์' };
+  if (!client) return { ok: false, message: NOT_CONFIGURED };
   if (new TextEncoder().encode(JSON.stringify(save)).length > MAX_SAVE_BYTES) {
     return { ok: false, message: 'ข้อมูลเซฟใหญ่เกินไป (เกิน 256 KB)' };
   }

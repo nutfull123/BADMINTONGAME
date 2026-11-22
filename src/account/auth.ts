@@ -4,7 +4,7 @@ import { getSupabase } from './client';
 
 export type AccountResult = { ok: true } | { ok: false; message: string };
 
-const NOT_CONFIGURED = 'ยังไม่ได้ตั้งค่าบัญชีออนไลน์';
+export const NOT_CONFIGURED = 'ยังไม่ได้ตั้งค่าบัญชีออนไลน์';
 const NETWORK = 'เชื่อมต่ออินเทอร์เน็ตไม่ได้ ลองใหม่อีกครั้ง';
 
 export const isConfigured = (): boolean => getSupabase() !== null;
@@ -66,5 +66,6 @@ export const signOut = (): Promise<AccountResult> => run((c) => c.auth.signOut()
 
 export async function deleteAccount(): Promise<AccountResult> {
   const deleted = await run((c) => c.rpc('delete_own_account'));
-  return deleted.ok ? signOut() : deleted;
+  if (deleted.ok) await signOut(); // the account is gone: a failed local sign-out must not report failure
+  return deleted;
 }

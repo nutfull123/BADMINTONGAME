@@ -2,6 +2,7 @@
 
 ## In progress
 <!-- - [agent] task — files owned — started YYYY-MM-DD -->
+- [sonnet] Phase 4 K1 career core — src/career/**, src/rules/index.ts, src/app/save.ts, src/app/characters.ts (+tests) — started 2026-11-22
 
 ## Done
 - [agy] Phase 3 V3 wood floor + linoleum mat textures, gym_01 HDRI environment (Sonnet review round 2) — main c0185ff — 2026-11-22

@@ -12,6 +12,7 @@ import { activeCharacter, awardPoints, characterBudget } from '../app/characters
 import { loadSave, writeSave } from '../app/save';
 import { toMatchSettings } from '../app/settings';
 import { matchPoints } from '../career';
+import { gameServerUrl } from '../net/connection';
 import type { AccountUser, SaveData, SyncChoice } from '../types';
 import {
   showAccountPage,
@@ -20,6 +21,7 @@ import {
   showHome,
   showMainMenu,
   showMatchSetup,
+  showOnlinePage,
   showPrivacyPage,
   showSettingsPage,
   showSyncChoiceDialog,
@@ -168,14 +170,32 @@ export function startGame(root: HTMLElement): void {
     showMainMenu(root, save, {
       onPlayMatch: openMatchSetup,
       onTutorial: launchTutorial,
+      onOnline: openOnline,
       onTournament: openCareer,
       onCharacters: openCharacters,
       onSettings: openSettings,
       user: activeUser,
       syncError,
       onRetrySync: activeUser && syncError ? retrySync : undefined,
+      supabaseConfigured: isConfigured(),
+      serverConfigured: Boolean(gameServerUrl()),
     });
     runDeferredSyncIfReady();
+  };
+
+  const openOnline = (): void => {
+    const active = activeCharacter(save);
+    if (!active) {
+      openCharacters();
+      return;
+    }
+    screen = 'other';
+    showOnlinePage(root, save, {
+      onBack: openMenu,
+      onMatchStateChange: (playing) => {
+        screen = playing ? 'playing' : 'other';
+      },
+    });
   };
 
   const openMatchSetup = (): void => {

@@ -1,6 +1,9 @@
+import { isConfigured } from '../../account/auth';
 import { activeCharacter } from '../../app/characters';
+import { gameServerUrl } from '../../net/connection';
 import type { AccountUser, SaveData } from '../../types';
 import { formatAccountBadge, formatCharacterSummary } from '../labels';
+import { onlineMenuStatus } from '../onlineHelpers';
 import { mountOverlay } from '../overlay';
 
 // ---------- 2. Main menu ----------
@@ -8,12 +11,15 @@ import { mountOverlay } from '../overlay';
 export interface MainMenuActions {
   onPlayMatch: () => void;
   onTutorial: () => void;
+  onOnline?: () => void;
   onTournament?: () => void;
   onCharacters: () => void;
   onSettings: () => void;
   user?: AccountUser | null;
   syncError?: string | null;
   onRetrySync?: () => void;
+  supabaseConfigured?: boolean;
+  serverConfigured?: boolean;
 }
 
 export function showMainMenu(root: HTMLElement, save: SaveData, actions: MainMenuActions): void {
@@ -130,11 +136,31 @@ export function showMainMenu(root: HTMLElement, save: SaveData, actions: MainMen
     actions.onTutorial();
   });
 
+  const onlineStatus = onlineMenuStatus(
+    actions.supabaseConfigured ?? isConfigured(),
+    actions.serverConfigured ?? Boolean(gameServerUrl()),
+    Boolean(actions.user),
+  );
   const onlineBtn = document.createElement('button');
   onlineBtn.type = 'button';
   onlineBtn.className = 'bm-btn';
-  onlineBtn.disabled = true;
-  onlineBtn.innerHTML = '<span>ออนไลน์</span><span class="bm-soon-pill">เร็วๆ นี้</span>';
+  onlineBtn.dataset.testid = 'menu-online';
+  if (onlineStatus.enabled && actions.onOnline) {
+    onlineBtn.disabled = false;
+    onlineBtn.textContent = 'ออนไลน์ (ห้องกับเพื่อน)';
+    onlineBtn.addEventListener('click', () => {
+      overlay.remove();
+      actions.onOnline?.();
+    });
+  } else {
+    onlineBtn.disabled = true;
+    const labelSpan = document.createElement('span');
+    labelSpan.textContent = 'ออนไลน์';
+    const reasonPill = document.createElement('span');
+    reasonPill.className = 'bm-soon-pill';
+    reasonPill.textContent = onlineStatus.reason ?? 'ยังไม่พร้อมใช้งาน';
+    onlineBtn.append(labelSpan, reasonPill);
+  }
 
   const tourBtn = document.createElement('button');
   tourBtn.type = 'button';

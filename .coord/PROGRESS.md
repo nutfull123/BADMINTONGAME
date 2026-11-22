@@ -2,12 +2,13 @@
 
 ## In progress
 <!-- - [agent] task — files owned — started YYYY-MM-DD -->
-- [agy] Phase 6 N3 online lobby pages, room page, HUD names, menu wiring — src/ui/**, src/game/index.ts — started 2026-11-22
 
 ## Waiting on the user
+- Phase 6 deploy: Fly.io account (card) + flyctl login, Cloudflare Pages account; then claude runs a local two-browser test and helps deploy (docs/deploy.md)
 - Phase 5 test with a real Supabase project: create it, run supabase/migrations/0001_user_saves.sql, providers and URLs per docs/supabase-setup.md, fill .env.local; then claude tests sign-up, Google, sync and delete
 
 ## Done
+- [all] Phase 6 online rooms code complete: N1 server (sonnet, agy review), N2 client core (sonnet, agy review), N3 lobby (agy, 2 Sonnet rounds), S2 serve timeout (sonnet, agy review) — main 2026-11-23
 - [sonnet] Phase 6 S2 online serve timeout (15 s, then the seat bot serves), reviewed by agy with a red-first check — main merge after a77f00b — 2026-11-23
 - [sonnet] Phase 6 N1 game server (protocol validation, auth, rooms, 120 Hz loop, lag compensation, Docker/fly.toml, deploy guide), reviewed by agy — main merge after 59ebd68 — 2026-11-23
 - [sonnet] Phase 6 N2 online client core (connection, clock, prediction, interpolation, mirror, startOnlineMatch), reviewed by agy — main merge after 5220112 — 2026-11-22

@@ -25,25 +25,26 @@ import {
   showSyncChoiceDialog,
   type CareerMatchLaunch,
   type ResultExtras,
+  type SignOutResult,
 } from '../ui';
 import { fitEvent } from '../ui/events';
 import { applyCareerResult } from './careerFlow';
 import { startMatch, type MatchOutcome } from './match';
-import { runSignInSync } from './syncFlow';
+import { decideAuthEventAction, runSignInSync, type AppScreen } from './syncFlow';
 import { startTutorial } from './tutorial';
 
 export { runRally, STEP } from './rally';
-
-type Screen = 'home' | 'account' | 'privacy' | 'menu' | 'other';
 
 export function startGame(root: HTMLElement): void {
   let save: SaveData = loadSave();
   let activeUser: AccountUser | null = null;
   let cloudSync: ReturnType<typeof createCloudSync> | null = null;
   let syncedUserId: string | null = null;
+  let attemptedSyncUserId: string | null = null;
+  let pendingAuthSync: AccountUser | null = null;
   let syncInFlight: { userId: string; promise: Promise<void> } | null = null;
   let syncError: string | null = null;
-  let screen: Screen = 'home';
+  let screen: AppScreen = 'home';
 
   const updateSave = (next: SaveData): boolean => {
     save = next;
@@ -63,6 +64,8 @@ export function startGame(root: HTMLElement): void {
     activeUser = null;
     cloudSync = null;
     syncedUserId = null;
+    attemptedSyncUserId = null;
+    pendingAuthSync = null;
     syncInFlight = null;
     syncError = null;
   };
@@ -72,8 +75,9 @@ export function startGame(root: HTMLElement): void {
     if (syncedUserId === user.id) return Promise.resolve();
     if (syncInFlight && syncInFlight.userId === user.id) return syncInFlight.promise;
 
+    attemptedSyncUserId = user.id;
     const promise = (async () => {
-      const res = await runSignInSync(user.id, save, {
+      const res = await runSignInSync(user.id, () => save, {
         fetchCloudSave,
         pushCloudSave,
         saveLocal: (next) => {
@@ -84,7 +88,6 @@ export function startGame(root: HTMLElement): void {
       });
       // Ignore stale result if the user signed out while syncing.
       if (activeUser?.id !== user.id) return;
-      save = res.save;
       if (res.ok) {
         syncError = null;
         syncedUserId = user.id;
@@ -99,6 +102,27 @@ export function startGame(root: HTMLElement): void {
 
     syncInFlight = { userId: user.id, promise };
     return promise;
+  };
+
+  const runDeferredSyncIfReady = (): void => {
+    const pending = pendingAuthSync;
+    if (!pending || activeUser?.id !== pending.id) return;
+    pendingAuthSync = null;
+    void syncSignedInUser(pending).then(() => {
+      if (activeUser?.id !== pending.id) return;
+      if (screen === 'menu') openMenu();
+    });
+  };
+
+  const retrySync = (): void => {
+    if (!activeUser) return;
+    const user = activeUser;
+    attemptedSyncUserId = null;
+    syncError = null;
+    void syncSignedInUser(user).then(() => {
+      if (activeUser?.id !== user.id) return;
+      if (screen === 'menu') openMenu();
+    });
   };
 
   const openPrivacy = (returnTo: () => void): void => {
@@ -128,6 +152,7 @@ export function startGame(root: HTMLElement): void {
       onOpenAccount: () => openAccount(openHome),
       onOpenPrivacy: () => openPrivacy(openHome),
     });
+    runDeferredSyncIfReady();
   };
 
   const openMenu = (): void => {
@@ -148,7 +173,9 @@ export function startGame(root: HTMLElement): void {
       onSettings: openSettings,
       user: activeUser,
       syncError,
+      onRetrySync: activeUser && syncError ? retrySync : undefined,
     });
+    runDeferredSyncIfReady();
   };
 
   const openMatchSetup = (): void => {
@@ -160,6 +187,7 @@ export function startGame(root: HTMLElement): void {
       (cfg) => {
         const active = activeCharacter(save);
         const charId = active?.id ?? null;
+        screen = 'playing';
         startMatch(
           root,
           {
@@ -197,6 +225,7 @@ export function startGame(root: HTMLElement): void {
       (launch: CareerMatchLaunch) => launchCareerMatch(active.id, launch),
       openMenu,
     );
+    runDeferredSyncIfReady();
   };
 
   const launchCareerMatch = (characterId: string, launch: CareerMatchLaunch): void => {
@@ -219,6 +248,7 @@ export function startGame(root: HTMLElement): void {
       format: next.format,
     };
 
+    screen = 'playing';
     startMatch(
       root,
       {
@@ -256,6 +286,7 @@ export function startGame(root: HTMLElement): void {
       ...save.settings,
       match: { ...save.settings.match, event: fitted },
     });
+    screen = 'playing';
     startTutorial(root, { stats: { ...active.stats }, settings }, openMenu);
   };
 
@@ -264,14 +295,25 @@ export function startGame(root: HTMLElement): void {
     showCharacters(root, save, updateSave, openMenu, openHome);
   };
 
-  const handleSignOut = async (): Promise<AccountResult> => {
-    if (cloudSync) await cloudSync.flush();
+  const handleSignOut = async (): Promise<SignOutResult> => {
+    const flushRes = cloudSync ? await cloudSync.flush() : ({ ok: true } as const);
     const res = await signOut();
-    if (res.ok) clearAccountState();
-    return res;
+    if (!res.ok) return res;
+    clearAccountState();
+    if (!flushRes.ok) {
+      return {
+        ok: true,
+        warning:
+          'ออกจากระบบแล้ว แต่การบันทึกล่าสุดขึ้นคลาวด์ไม่สำเร็จ ข้อมูลล่าสุดถูกเก็บไว้เฉพาะในอุปกรณ์นี้ (Signed out; last changes are saved only on this device)',
+      };
+    }
+    return { ok: true };
   };
 
   const handleDeleteAccount = async (): Promise<AccountResult> => {
+    if (cloudSync) {
+      await cloudSync.flush();
+    }
     const res = await deleteAccount();
     if (res.ok) clearAccountState();
     return res;
@@ -281,6 +323,7 @@ export function startGame(root: HTMLElement): void {
     screen = 'other';
     showSettingsPage(root, save, updateSave, openMenu, {
       user: activeUser,
+      getUser: () => activeUser,
       configured: isConfigured(),
       onOpenAccount: () => openAccount(openSettings),
       onSignOut: handleSignOut,
@@ -302,14 +345,31 @@ export function startGame(root: HTMLElement): void {
   if (isConfigured()) {
     onAuthChange((user) => {
       if (!user) {
+        const pendingSync = cloudSync;
         clearAccountState();
+        // Flush stops any pending 2 s timer immediately; local save is already written and any failed push is ignored on purpose.
+        if (pendingSync) void pendingSync.flush();
         if (screen === 'menu') openMenu();
         return;
       }
-      const shouldRefreshMenu = screen === 'home' || screen === 'account' || screen === 'menu';
+
+      const decision = decideAuthEventAction(screen, user.id, {
+        syncedUserId,
+        attemptedSyncUserId,
+      });
+      activeUser = user;
+
+      if (decision.kind === 'ignore') return;
+      if (decision.kind === 'defer') {
+        pendingAuthSync = user;
+        return;
+      }
+
       void syncSignedInUser(user).then(() => {
         if (activeUser?.id !== user.id) return;
-        if (shouldRefreshMenu) openMenu();
+        if (decision.navigateToMenu && screen !== 'playing' && screen !== 'privacy') {
+          openMenu();
+        }
       });
     });
   }

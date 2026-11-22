@@ -38,11 +38,16 @@ const MODE_DESC: Record<MatchSettings['mode'], string> = {
 
 type SettingsTab = 'camera' | 'controls' | 'assists' | 'graphics' | 'account';
 
+export type SignOutResult =
+  | { ok: true; warning?: string }
+  | { ok: false; message: string };
+
 export interface SettingsAccountOptions {
   user: AccountUser | null;
+  getUser?: () => AccountUser | null;
   configured?: boolean;
   onOpenAccount?: () => void;
-  onSignOut?: () => Promise<AccountResult>;
+  onSignOut?: () => Promise<SignOutResult>;
   onDeleteAccount?: () => Promise<AccountResult>;
 }
 
@@ -60,7 +65,7 @@ export function showSettingsPage(
   let listeningAction: InputAction | null = null;
   let conflictNotice: string | null = null;
   let cleanupCapture: (() => void) | null = null;
-  let accountUser: AccountUser | null = account?.user ?? null;
+  let accountUser: AccountUser | null = account?.getUser ? account.getUser() : (account?.user ?? null);
   let confirmingDelete = false;
   let accountBusy = false;
   let accountError: string | null = null;
@@ -126,6 +131,10 @@ export function showSettingsPage(
         conflictNotice = null;
         confirmingDelete = false;
         accountError = null;
+        accountInfo = null;
+        if (t.id === 'account' && account?.getUser) {
+          accountUser = account.getUser();
+        }
         renderTabs();
       });
       tabsBar.appendChild(btn);
@@ -416,6 +425,9 @@ export function showSettingsPage(
   }
 
   function renderAccountTab(container: HTMLElement): void {
+    if (account?.getUser) {
+      accountUser = account.getUser();
+    }
     const card = document.createElement('div');
     card.className = 'bm-char-card';
     card.style.flexDirection = 'column';
@@ -516,7 +528,9 @@ export function showSettingsPage(
         accountError = res.message;
       } else {
         accountUser = null;
-        accountInfo = 'ออกจากระบบแล้ว ข้อมูลเซฟในเบราว์เซอร์นี้ยังคงอยู่ (Signed out; local save kept)';
+        accountInfo =
+          res.warning ??
+          'ออกจากระบบแล้ว ข้อมูลเซฟในเบราว์เซอร์นี้ยังคงอยู่ (Signed out; local save kept)';
       }
       renderTabs();
     });

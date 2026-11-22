@@ -14,7 +14,7 @@ export type { MainMenuActions } from './pages/mainMenu';
 export { showMatchSetup } from './pages/matchSetup';
 export { showCharacters } from './pages/characters';
 export { showSettingsPage } from './pages/settings';
-export type { SettingsAccountOptions } from './pages/settings';
+export type { SettingsAccountOptions, SignOutResult } from './pages/settings';
 export { showCareerPage } from './pages/career';
 export type { CareerMatchLaunch } from './pages/career';
 export { createHud } from './hud';

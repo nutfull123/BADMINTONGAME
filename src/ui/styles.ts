@@ -468,6 +468,124 @@ export function ensureStyles(): void {
       color: #94a3b8;
       line-height: 1.6;
     }
+    .bm-progress-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: rgba(30, 41, 59, 0.55);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 10px;
+      padding: 10px 14px;
+      margin: 10px 0 14px 0;
+      font-size: 13px;
+      color: #cbd5e1;
+      font-variant-numeric: tabular-nums;
+    }
+    .bm-progress-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      font-weight: 700;
+      flex-wrap: wrap;
+    }
+    .bm-tier-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 10px;
+    }
+    .bm-tier-card {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      background: rgba(30, 41, 59, 0.65);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      cursor: pointer;
+      text-align: left;
+      color: #f8fafc;
+      transition: border-color 120ms ease, background 120ms ease;
+    }
+    .bm-tier-card.active {
+      border-color: #38bdf8;
+      background: rgba(56, 189, 248, 0.12);
+    }
+    .bm-tier-card.locked {
+      opacity: 0.48;
+      cursor: not-allowed;
+    }
+    .bm-bracket-scroll {
+      display: flex;
+      gap: 14px;
+      overflow-x: auto;
+      padding: 10px 4px 14px 4px;
+      margin-top: 8px;
+    }
+    .bm-bracket-col {
+      min-width: 195px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .bm-bracket-col-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #38bdf8;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+    }
+    .bm-bracket-match {
+      background: rgba(30, 41, 59, 0.68);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .bm-bracket-match.human {
+      border-color: #38bdf8;
+      background: rgba(56, 189, 248, 0.12);
+    }
+    .bm-bracket-team {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+      color: #cbd5e1;
+    }
+    .bm-bracket-team.human {
+      color: #38bdf8;
+      font-weight: 800;
+    }
+    .bm-bracket-team.winner {
+      color: #4ade80;
+      font-weight: 700;
+    }
+    .bm-bracket-score {
+      font-size: 12px;
+      color: #94a3b8;
+      font-variant-numeric: tabular-nums;
+      margin-top: 2px;
+    }
+    .bm-next-match-card {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid rgba(34, 197, 94, 0.45);
+      border-radius: 12px;
+      padding: 16px 18px;
+      margin: 16px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
   `;
   document.head.appendChild(style);
 }

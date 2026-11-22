@@ -3,11 +3,14 @@ import type {
   BodyType,
   CameraPreset,
   Character,
+  GameScore,
   Gender,
   GraphicsQuality,
   InputAction,
   KeyBindings,
+  TierId,
 } from '../types';
+import type { RoundName } from '../career';
 import { heightOf } from '../sim/tuning';
 
 export const ACTION_ORDER: readonly InputAction[] = [
@@ -137,4 +140,77 @@ export function formatCharacterSummary(c: Character): string {
 
 export function matchesBinding(keys: KeyBindings, action: InputAction, code: string): boolean {
   return keys[action]?.includes(code) ?? false;
+}
+
+// ---------- Career & Progression labels ----------
+
+export const TIER_LABELS: Record<TierId, string> = {
+  club: 'คลับโอเพ่น (Club Open)',
+  regional: 'รีเจียนนัลคัพ (Regional Cup)',
+  national: 'เนชันแนลแชมเปียนชิพ (National Championship)',
+  masters: 'แกรนด์มาสเตอร์ส (Grand Masters)',
+};
+
+export const ROUND_LABELS: Record<RoundName, string> = {
+  R32: 'รอบ 32 ทีม (R32)',
+  R16: 'รอบ 16 ทีม (R16)',
+  QF: 'รอบก่อนรองฯ (QF)',
+  SF: 'รอบรองชนะเลิศ (SF)',
+  F: 'รอบชิงชนะเลิศ (Final)',
+};
+
+const ROUND_ORDER_FROM_FINAL: readonly RoundName[] = ['F', 'SF', 'QF', 'R16', 'R32'];
+
+export function roundNameFor(roundIndex: number, totalRounds: number): RoundName {
+  const left = Math.max(1, Math.min(ROUND_ORDER_FROM_FINAL.length, totalRounds - roundIndex));
+  return ROUND_ORDER_FROM_FINAL[left - 1]!;
+}
+
+export function formatRoundReachedLabel(reached: number | undefined, bracketSize: 8 | 16 | 32): string {
+  if (reached === undefined) return 'ยังไม่เคยลงแข่ง (Not played)';
+  const totalRounds = Math.log2(bracketSize);
+  if (reached >= totalRounds) return 'แชมป์ (Champion)';
+  const rn = roundNameFor(reached, totalRounds);
+  return ROUND_LABELS[rn];
+}
+
+export interface EarnedPointsSummary {
+  earned: number;
+  whole: number;
+  progressPct: number;
+  text: string;
+  progressText: string;
+}
+
+export function formatEarnedPointsSummary(earnedPoints: number, maxEarned = 20): EarnedPointsSummary {
+  const safe = Number.isFinite(earnedPoints) ? Math.max(0, Math.min(maxEarned, earnedPoints)) : 0;
+  const whole = Math.floor(safe + 1e-9);
+  const frac = Math.max(0, safe - whole);
+  const isMax = whole >= maxEarned;
+  const progressPct = isMax ? 100 : Math.round(frac * 100);
+  const formatted = Number.isInteger(Math.round(safe * 1000) / 1000)
+    ? String(Math.round(safe))
+    : Number(safe.toFixed(4)).toString();
+  return {
+    earned: safe,
+    whole,
+    progressPct,
+    text: `แต้มสะสม: ${formatted} / ${maxEarned} (+${whole} แต้มพลัง)`,
+    progressText: isMax
+      ? 'แต้มสะสมเต็มแล้ว (Max 20/20)'
+      : `ความคืบหน้าแต้มถัดไป: ${progressPct}% (${Math.round(frac * 100)} / 100)`,
+  };
+}
+
+export function formatPlayerSideScore(storedScore: string | null, playerIsEntrantA: boolean): string {
+  if (!storedScore) return '—';
+  if (playerIsEntrantA) return storedScore;
+  return storedScore
+    .split(' ')
+    .map((game) => game.split('-').reverse().join('-'))
+    .join(' ');
+}
+
+export function formatMatchScoreForCareer(games: readonly GameScore[]): string {
+  return games.map((g) => `${g.near}-${g.far}`).join(' ');
 }

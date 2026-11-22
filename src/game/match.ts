@@ -2,18 +2,31 @@
 import { loadSave } from '../app/save';
 import { createInput } from '../input';
 import { createRenderer } from '../render';
-import { FORMAT_3X15, FORMAT_3X21, awardRally, createMatch, serverSlot } from '../rules';
+import { FORMAT_1X15, FORMAT_3X15, FORMAT_3X21, awardRally, createMatch, serverSlot } from '../rules';
 import { chargeLevel, createPlayer, validateStats } from '../sim';
 import { aimView, applyAssist, racketFromAim } from '../sim/assist';
 import { botIntent, createBot, type Bot } from '../sim/bot';
 import { ASSIST_GAME_SPEED } from '../sim/tuning';
-import { createHud, createViewControls, PRESETS, showResult, type Settings } from '../ui';
-import type { Intent, MatchState, PlayerState, Side, Slot, Stats, WorldView } from '../types';
+import { createHud, createViewControls, PRESETS, showResult, type ResultExtras, type Settings } from '../ui';
+import { formatMatchScoreForCareer } from '../ui/labels';
+import type { Intent, MatchConfig, MatchState, PlayerState, Side, Slot, Stats, WorldView } from '../types';
 import { predictLanding } from '../physics';
 import { STEP, aimServe, botContext, startRally, stepRally, type Rally, type RallyReason } from './rally';
-import { buildTeams, isDoubles } from './teams';
+import { buildTeams, isDoubles, type GivenTeams } from './teams';
 
-export interface MatchSetup { stats: Stats; settings: Settings }
+export interface MatchOutcome {
+  won: boolean;
+  score: string;
+  match: MatchState;
+}
+
+export interface MatchSetup {
+  stats: Stats;
+  settings: Settings;
+  budget?: number;
+  givenTeams?: GivenTeams;
+  onFinish?: (outcome: MatchOutcome) => ResultExtras | void;
+}
 
 const POINT_PAUSE = 1.5; // s between points
 const BREAK_PAUSE = 3; // s for an interval or the end of a game
@@ -29,7 +42,7 @@ export function startMatch(root: HTMLElement, setup: MatchSetup, onAgain: () => 
   const { settings } = setup;
   const assist = settings.hitAssist / 100;
   const speed = ASSIST_GAME_SPEED[settings.mode];
-  const humanStats = validateStats(setup.stats) === null ? setup.stats : PRESETS.balanced;
+  const humanStats = validateStats(setup.stats, setup.budget ?? 40) === null ? setup.stats : PRESETS.balanced;
   const doubles = isDoubles(settings.event);
 
   const container = document.createElement('div');
@@ -46,7 +59,7 @@ export function startMatch(root: HTMLElement, setup: MatchSetup, onAgain: () => 
   const viewControls = createViewControls(root, (z) => renderer.setZoom(z));
 
   // the human is near slot 0; the rest are bots (the human's partner, then the opponents)
-  const teams = buildTeams(settings.event, humanStats);
+  const teams = buildTeams(settings.event, humanStats, Math.random, setup.givenTeams);
   const team = (side: Side): PlayerState[] =>
     teams[side].map((s, i) => createPlayer(s, side, { x: 0, y: 0, z: side === 'near' ? 3.5 : -3.5 }, i as Slot));
   // fresh per rally: a bot remembers the last shuttle direction
@@ -54,7 +67,9 @@ export function startMatch(root: HTMLElement, setup: MatchSetup, onAgain: () => 
     near: teams.near.map((_, i) => (i === 0 ? null : createBot(settings.botLevel))),
     far: teams.far.map(() => createBot(settings.botLevel)),
   });
-  let match: MatchState = createMatch(settings.format === '3x21' ? FORMAT_3X21 : FORMAT_3X15, 'near', doubles);
+  const matchConfig: MatchConfig =
+    settings.format === '3x21' ? FORMAT_3X21 : settings.format === '1x15' ? FORMAT_1X15 : FORMAT_3X15;
+  let match: MatchState = createMatch(matchConfig, 'near', doubles);
   let rally: Rally = startRally(match, { near: team('near'), far: team('far') });
   let bots = freshBots();
   let phase: 'play' | 'between' = 'play';
@@ -91,7 +106,16 @@ export function startMatch(root: HTMLElement, setup: MatchSetup, onAgain: () => 
     renderer.dispose();
     container.remove();
     if (document.pointerLockElement) document.exitPointerLock();
-    showResult(root, match, onAgain);
+    const games = match.completedGames.length > 0 ? match.completedGames : [match.score];
+    const extras =
+      match.winner !== null && setup.onFinish
+        ? setup.onFinish({
+            won: match.winner === 'near',
+            score: formatMatchScoreForCareer(games),
+            match,
+          }) ?? undefined
+        : undefined;
+    showResult(root, match, onAgain, extras);
   }
 
   const humanServes = () => rally.stage === 'serve' && rally.server === 'near' && rally.serverSlot === 0;

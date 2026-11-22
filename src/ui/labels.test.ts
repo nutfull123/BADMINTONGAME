@@ -6,6 +6,7 @@ import {
   GRAPHICS_QUALITY_LABELS,
   ROUND_LABELS,
   TIER_LABELS,
+  formatAccountBadge,
   formatKeyCode,
   formatBindingList,
   formatConflictMessage,
@@ -16,9 +17,12 @@ import {
   formatMovementHint,
   formatPlayerSideScore,
   formatRoundReachedLabel,
+  formatSaveSyncSummary,
   matchesBinding,
+  validateAccountForm,
 } from './labels';
 import { DEFAULT_KEYS, rebindKey } from '../app/settings';
+import { emptySave } from '../app/save';
 import type { Character, GameScore } from '../types';
 
 describe('UI shell pure helpers (labels, key formatting, conflict warning, character summary)', () => {
@@ -147,5 +151,36 @@ describe('UI shell pure helpers (labels, key formatting, conflict warning, chara
 
     const games: GameScore[] = [{ near: 15, far: 11 }, { near: 12, far: 15 }, { near: 15, far: 9 }];
     expect(formatMatchScoreForCareer(games)).toBe('15-11 12-15 15-9');
+  });
+
+  it('validates account sign-in/sign-up fields (email, password >= 8 chars, PDPA consent on sign-up)', () => {
+    expect(validateAccountForm('signin', '', '12345678', false)).toContain('อีเมล');
+    expect(validateAccountForm('signin', 'a@b.com', '1234567', false)).toContain('8');
+    expect(validateAccountForm('signin', 'a@b.com', '12345678', false)).toBeNull();
+    expect(validateAccountForm('signup', 'a@b.com', '12345678', false)).toContain('นโยบายความเป็นส่วนตัว');
+    expect(validateAccountForm('signup', 'a@b.com', '12345678', true)).toBeNull();
+  });
+
+  it('formats the account badge for a signed-in user or guest, and summarizes a SaveData for sync conflicts', () => {
+    expect(formatAccountBadge(null)).toBe('ผู้เล่นทั่วไป (Guest)');
+    expect(formatAccountBadge({ id: 'u1', email: 'player@example.com' })).toContain('player@example.com');
+
+    const save = {
+      ...emptySave(),
+      characters: [
+        {
+          id: 'c1',
+          name: 'เมย์',
+          stats: { gender: 'female' as const, body: 'tall' as const, speed: 5, power: 5, recovery: 5, stamina: 5 },
+          earnedPoints: 3.5,
+          career: { unlocked: 2, best: { club: 3 }, current: null },
+          createdAt: 1,
+        },
+      ],
+    };
+    const summary = formatSaveSyncSummary(save);
+    expect(summary).toContain('เมย์');
+    expect(summary).toContain('3.5');
+    expect(summary).toContain('2/4');
   });
 });

@@ -4,11 +4,17 @@
 export { DEFAULT_SETTINGS, PRESETS, STAT_BUDGET, budgetLeft, clampStatToBudget } from './model';
 export type { Settings, StatKey } from './model';
 export { showHome } from './pages/home';
+export type { HomeActions } from './pages/home';
+export { showAccountPage } from './pages/account';
+export type { AccountPageActions } from './pages/account';
+export { showPrivacyPage } from './pages/privacy';
+export { showSyncChoiceDialog } from './pages/syncChoice';
 export { showMainMenu } from './pages/mainMenu';
 export type { MainMenuActions } from './pages/mainMenu';
 export { showMatchSetup } from './pages/matchSetup';
 export { showCharacters } from './pages/characters';
 export { showSettingsPage } from './pages/settings';
+export type { SettingsAccountOptions, SignOutResult } from './pages/settings';
 export { showCareerPage } from './pages/career';
 export type { CareerMatchLaunch } from './pages/career';
 export { createHud } from './hud';

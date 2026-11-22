@@ -30,12 +30,15 @@ interface SwingOpts {
   shuttleVel?: Vec3;
   assist?: number;
   player?: PlayerState;
+  serve?: boolean; // place the shuttle at the serve-clamped racket head
 }
 // Fire `first` on frame 0, then hold the racket still for 0.3 s; returns the first hit (and the player then).
 function swing(first: Partial<Intent>, o: SwingOpts = {}) {
   let p = o.player ?? spawn();
   const racket = o.racket ?? { x: 0, y: 0 };
-  const head = headFor(p, racket);
+  const head = o.serve
+    ? stepPlayer(p, { ...idle, racket, charging: 'serveShort', chargeTime: 0 }, farShuttle, DT, o.assist ?? 1).player.racketHead
+    : headFor(p, racket);
   let s: ShuttleState = { pos: at(head, o.offset ?? {}), vel: o.shuttleVel ?? zero };
   const base = { racket, racketVel: o.racketVel ?? { x: 0, y: 0 } };
   for (let i = 0; i < 36; i++) {
@@ -230,6 +233,26 @@ describe('shots', () => {
   it('serve contact stays below 1.15 m even with the racket held high', () => {
     const held = stepPlayer(spawn('tall', 'near', 2.2), { ...idle, racket: { x: 0, y: 1 }, charging: 'serveShort', chargeTime: 0.2 }, farShuttle, DT, 1).player;
     expect(held.racketHead.y).toBeLessThanOrEqual(1.15);
+  });
+  it('a serve is struck at or below 1.15 m when a high assist reaches a shuttle above the limit', () => {
+    // BWF Law 9.1.6: the whole shuttle must be below 1.15 m when the server's racket hits it. The racket head is
+    // clamped for a serve, but hit assist 1 has a 0.8 m radius, so a high shuttle can still be inside the radius.
+    noSpread();
+    const out = swing(
+      { release: 'serveShort', chargeTime: 0.3 },
+      { racket: { x: 0, y: 1 }, offset: { y: 0.5 }, assist: 1, serve: true },
+    );
+    expect(out.hit).not.toBeNull();
+    expect(out.hit!.launch.pos.y).toBeLessThanOrEqual(1.15);
+  });
+  it('does not lower a non-serve contact: only serves are capped at 1.15 m', () => {
+    noSpread();
+    const out = swing(
+      { release: 'smash', chargeTime: 0.3 },
+      { racket: { x: 0, y: 1 }, offset: { y: 0.5 }, assist: 1 },
+    );
+    expect(out.hit).not.toBeNull();
+    expect(out.hit!.launch.pos.y).toBeGreaterThan(1.15);
   });
 });
 

@@ -272,7 +272,7 @@ describe('doubles', () => {
     setRandom(Math.random);
   });
 
-  it('four bots play ten points in a row, carrying the players from rally to rally', () => {
+  it('four bots play ten points in a row, carrying the players from rally to rally', { timeout: 15_000 }, () => { // ten full 4-bot rallies: ~1 s alone, slower when the CPU is busy
     setRandom(seeded(1));
     const bots = { near: [createBot('medium', seeded(2)), createBot('medium', seeded(3))], far: [createBot('medium', seeded(4)), createBot('medium', seeded(5))] };
     let match = doublesMatch();

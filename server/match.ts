@@ -10,6 +10,7 @@ import { botIntent, createBot, type Bot } from '../src/sim/bot';
 import type { Intent, MatchState, PlayerState, ShuttleState, Side, Slot, Stats } from '../src/types';
 
 const START_DELAY = 3; // s before the first serve, so every client has loaded
+export const SERVE_TIMEOUT_S = 15; // s of simulated time a human server may hold up the serve (Law 16: no undue delay)
 const POINT_PAUSE = 1.5; // s between points (as offline)
 const BREAK_PAUSE = 3; // s for an interval or the end of a game (as offline)
 const MAX_FRAME_BACKLOG = 128; // queued input frames per player; the oldest go first
@@ -68,6 +69,7 @@ export class MatchLoop {
   readonly history = new ShuttleHistory();
   private timer = START_DELAY;
   private breakPause = false;
+  private serveWait = 0;      // s the current rally has waited in the serve stage
   private bots: (Bot | null)[];
   private humans: (Human | null)[];
   private memory: ({ lastSeq: number; ackSeq: number } | undefined)[] = [];
@@ -135,6 +137,7 @@ export class MatchLoop {
         if (this.match.winner) return this.finish();
         this.rally = startRally(this.match, this.rally.players);
         this.freshBots();
+        this.serveWait = 0;
         this.history.clear();
         for (const h of this.humans) if (h) { h.queue = []; h.current = idleIntent(); }
         this.phase = 'play';
@@ -150,13 +153,14 @@ export class MatchLoop {
     const r = this.rally;
     const intents: Record<Side, Intent[]> = { near: [], far: [] };
     const views = new Map<string, ShuttleView>();
+    if (r.stage === 'serve') this.serveWait += STEP;
     for (let seat = 0; seat < this.humans.length; seat++) {
       const side = seatSide(seat), slot = seatSlot(seat);
       const p = r.players[side][slot];
       const h = this.humans[seat];
-      if (h) {
-        const raw = this.nextIntent(h);
-        const serving = r.stage === 'serve' && r.server === side && r.serverSlot === slot;
+      const serving = r.stage === 'serve' && r.server === side && r.serverSlot === slot;
+      const raw = h ? this.nextIntent(h) : idleIntent(); // a late server's input is still consumed, then ignored
+      if (h && !(serving && this.serveWait >= SERVE_TIMEOUT_S)) { // else the bot serves for them
         const view = serving ? null : this.lagView(h, p, raw);
         if (view) views.set(`${side}${slot}`, view);
         intents[side][slot] = serving ? aimServe(raw, p) : applyAssist(raw, p, view?.shuttle ?? r.shuttle, this.o.settings.assists.mode);

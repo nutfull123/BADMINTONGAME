@@ -3,7 +3,7 @@ import { botContext } from '../src/game/rally';
 import { REWIND_MAX_TICKS, SNAPSHOT_HZ, TICK_HZ, type RoomSettings, type ServerMessage, type Snapshot } from '../src/net/protocol';
 import { createBot, botIntent } from '../src/sim/bot';
 import type { Intent, ShuttleState, Stats } from '../src/types';
-import { MatchLoop, ShuttleHistory, seatSide, seatSlot } from './match';
+import { MatchLoop, SERVE_TIMEOUT_S, ShuttleHistory, seatSide, seatSlot } from './match';
 
 const stats: Stats = { gender: 'male', body: 'balanced', speed: 5, power: 5, recovery: 5, stamina: 5 };
 const settings = (o: Partial<RoomSettings> = {}): RoomSettings => ({
@@ -170,5 +170,54 @@ describe('lag compensation', () => {
 
   it('without lag information (the current tick) the same swing misses', () => {
     expect(scenario(10, 0).hit).toBe(false);
+  });
+
+  describe('serve timeout', () => {
+    const silent = () => {};
+    // Steps one tick at a time; returns the seconds each rally spent in the serve stage (until `rallies` have been served).
+    const serveWaits = (loop: MatchLoop, rallies: number) => {
+      const waits: number[] = [];
+      let n = 0;
+      for (let i = 0; i < 120 * 200 && waits.length < rallies; i++) {
+        const serving = loop.phase === 'play' && loop.rally.stage === 'serve';
+        loop.step();
+        if (serving) n++;
+        else if (n > 0) { waits.push(n / TICK_HZ); n = 0; }
+      }
+      return waits;
+    };
+
+    it('serves for a silent human server after SERVE_TIMEOUT_S, then the rally plays to a result and the timer resets', () => {
+      const loop = new MatchLoop({ settings: settings(), stats: [stats, stats], rng: seeded(3) });
+      loop.attach(0, silent); loop.attach(1, silent);
+      const waits = serveWaits(loop, 3);
+      expect(waits).toHaveLength(3);
+      for (const w of waits) { expect(w).toBeGreaterThanOrEqual(SERVE_TIMEOUT_S); expect(w).toBeLessThan(SERVE_TIMEOUT_S + 2); }
+      expect(loop.match.score.near + loop.match.score.far).toBeGreaterThanOrEqual(2); // rallies finished with a result
+    });
+
+    it('a human who serves at 14 s serves normally', () => {
+      const loop = new MatchLoop({ settings: settings(), stats: [stats, stats], rng: seeded(3) });
+      loop.attach(0, silent);
+      const bot = createBot('medium', seeded(1));
+      for (let i = 0; i < 120 * 3 + 120 * 14; i++) loop.step();
+      expect(loop.rally.stage).toBe('serve');
+      let seq = 0;
+      let left = 0;
+      while (loop.rally.stage === 'serve' && left++ < 120 * 5) {
+        const intent = botIntent(bot, loop.rally.players.near[0], botContext(loop.rally, 'near', 0), loop.rally.shuttle, 1 / TICK_HZ);
+        loop.input(0, [{ seq: seq++, tick: loop.tick, intent }]);
+        loop.step();
+      }
+      expect(loop.rally.stage).not.toBe('serve');
+      expect(loop.tick / TICK_HZ).toBeLessThan(3 + SERVE_TIMEOUT_S + 2);
+    });
+
+    it('a bot server is unaffected', () => {
+      const loop = new MatchLoop({ settings: settings(), stats: [stats, stats], rng: seeded(3) });
+      loop.attach(1, silent); // the far seat is human but the near seat (the server) is a bot
+      const [w] = serveWaits(loop, 1);
+      expect(w).toBeLessThan(SERVE_TIMEOUT_S);
+    });
   });
 });

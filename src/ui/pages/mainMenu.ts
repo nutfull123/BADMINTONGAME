@@ -1,6 +1,6 @@
 import { activeCharacter } from '../../app/characters';
-import type { SaveData } from '../../types';
-import { formatCharacterSummary } from '../labels';
+import type { AccountUser, SaveData } from '../../types';
+import { formatAccountBadge, formatCharacterSummary } from '../labels';
 import { mountOverlay } from '../overlay';
 
 // ---------- 2. Main menu ----------
@@ -11,6 +11,8 @@ export interface MainMenuActions {
   onTournament?: () => void;
   onCharacters: () => void;
   onSettings: () => void;
+  user?: AccountUser | null;
+  syncError?: string | null;
 }
 
 export function showMainMenu(root: HTMLElement, save: SaveData, actions: MainMenuActions): void {
@@ -22,10 +24,37 @@ export function showMainMenu(root: HTMLElement, save: SaveData, actions: MainMen
 
   const { overlay, panel } = mountOverlay(root);
 
+  const headerBar = document.createElement('div');
+  headerBar.className = 'bm-header-bar';
+
   const title = document.createElement('h1');
   title.className = 'bm-title';
   title.style.fontSize = '32px';
+  title.style.margin = '0';
   title.textContent = 'เมนูหลัก (Main Menu)';
+
+  const accountBadge = document.createElement('div');
+  accountBadge.className = 'bm-soon-pill';
+  accountBadge.dataset.testid = 'menu-account-status';
+  accountBadge.style.fontSize = '13px';
+  accountBadge.style.padding = '5px 12px';
+  if (actions.user) {
+    accountBadge.style.background = 'rgba(56, 189, 248, 0.2)';
+    accountBadge.style.color = '#38bdf8';
+  }
+  accountBadge.textContent = formatAccountBadge(actions.user ?? null);
+
+  headerBar.append(title, accountBadge);
+  panel.appendChild(headerBar);
+
+  if (actions.syncError) {
+    const syncWarn = document.createElement('div');
+    syncWarn.className = 'bm-notice';
+    syncWarn.dataset.testid = 'menu-sync-error';
+    syncWarn.style.marginBottom = '16px';
+    syncWarn.textContent = actions.syncError;
+    panel.appendChild(syncWarn);
+  }
 
   // Active character header
   const charBar = document.createElement('div');
@@ -114,5 +143,5 @@ export function showMainMenu(root: HTMLElement, save: SaveData, actions: MainMen
   });
 
   grid.append(matchBtn, tutBtn, onlineBtn, tourBtn, charsBtn, settingsBtn);
-  panel.append(title, charBar, grid);
+  panel.append(charBar, grid);
 }

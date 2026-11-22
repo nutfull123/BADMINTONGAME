@@ -2,6 +2,7 @@
 
 ## In progress
 <!-- - [agent] task — files owned — started YYYY-MM-DD -->
+- [sonnet] Phase 5 A1 account core — src/account/**, src/app/save.ts, supabase/**, docs/supabase-setup.md — started 2026-11-22
 
 ## Done
 - [all] Phase 4 career and progression complete: K1 career core (sonnet), K2 + K2b pages, flow and tests (agy), S1 serve fix (opencode); every branch cross-reviewed — main 2026-11-22

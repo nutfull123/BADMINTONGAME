@@ -46,6 +46,18 @@ export async function currentUser(): Promise<AccountUser | null> {
   }
 }
 
+// The current Supabase access token (refreshed by supabase-js when needed) for the game server's 'hello'.
+export async function getAccessToken(): Promise<string | null> {
+  const c = getSupabase();
+  if (!c) return null;
+  try {
+    const { data } = await c.auth.getSession();
+    return data.session?.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function onAuthChange(cb: (user: AccountUser | null) => void): () => void {
   const c = getSupabase();
   if (!c) return () => {};

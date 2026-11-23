@@ -1,5 +1,8 @@
 # Progress log (shared by claude, opencode, agy)
 
+## Moved to Roblox (2026-11-23)
+- The owner is rebuilding the game on Roblox in /Users/knimf/BADMINTON-ROBLOX (desktop + mobile, with a friend). This web repo stays as the reference implementation; its phases 5-6 are code-complete but never tested against live Supabase/Fly.io.
+
 ## In progress
 <!-- - [agent] task — files owned — started YYYY-MM-DD -->
 
